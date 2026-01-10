@@ -72,19 +72,19 @@ def remove_gravity(df, fs=32, gravity_cutoff=0.3):
     return df_out
 
 # ---- Signal Vector Magnitude computation -----
-def compute_svm(df):
-    df["svm_raw"] = np.sqrt(
-        df["accX"]**2 + df["accY"]**2 + df["accZ"]**2
-    )
+# def compute_svm(df):
+#     df["svm_raw"] = np.sqrt(
+#         df["accX"]**2 + df["accY"]**2 + df["accZ"]**2
+#     )
 
-    df["svm_dyn"] = np.sqrt(
-        df["accX_dyn"]**2 +
-        df["accY_dyn"]**2 +
-        df["accZ_dyn"]**2
-    )
+#     df["svm_dyn"] = np.sqrt(
+#         df["accX_dyn"]**2 +
+#         df["accY_dyn"]**2 +
+#         df["accZ_dyn"]**2
+#     )
 
-    print("Computed Signal Vector Magnitude (SVM).")
-    return df
+#     print("Computed Signal Vector Magnitude (SVM).")
+#     return df
 
 # ----- Z-score normalisation -----
 def zscore_normalise(df, columns):
@@ -113,12 +113,12 @@ def preprocess_imu(
     df = remove_gravity(df, fs, gravity_cutoff)
 
     # SVM
-    df = compute_svm(df)
+    # df = compute_svm(df)
 
     # Normalisation
     norm_cols = [
-        "accX_dyn", "accY_dyn", "accZ_dyn",
-        "svm_dyn", "svm_raw"
+        "accX_dyn", "accY_dyn", "accZ_dyn" #,
+    #     "svm_dyn", "svm_raw"
     ]
     df = zscore_normalise(df, norm_cols)
 
@@ -130,6 +130,7 @@ def main():
     df_processed = preprocess_imu(path)
 
     print(df_processed.head())
+    print(df_processed)
 
 if __name__ == "__main__":
     main()
