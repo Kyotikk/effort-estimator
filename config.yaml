@@ -1,0 +1,17 @@
+imu:
+  fs: 32
+  signals:
+    raw:
+      - acc_x
+      - acc_y
+      - acc_z
+    dynamic:
+      - acc_x_dyn
+      - acc_y_dyn
+      - acc_z_dyn
+    gravity:
+      - acc_x_grav
+      - acc_y_grav
+      - acc_z_grav
+    magnitude:
+      enabled: true

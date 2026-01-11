@@ -1,0 +1,11 @@
+numpy
+pandas
+yaml
+scipy.signal
+argparse
+os
+logging
+sys
+warnings
+typing
+tifex-py
