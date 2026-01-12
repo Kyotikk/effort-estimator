@@ -28,7 +28,7 @@ def flatten_axis_feature_df(feat_df: pd.DataFrame, prefix_sep: str = "__") -> Di
     """
     flat: Dict[str, float] = {}
     # index contains axis names; columns are feature names
-    for axis_name, row in feat_df.iterrows():
+    for signal_name, row in feat_df.iterrows():
         for feat_name, val in row.items():
             flat[f"{axis_name}{prefix_sep}{feat_name}"] = val
     return flat

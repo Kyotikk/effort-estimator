@@ -9,3 +9,4 @@ sys
 warnings
 typing
 tifex-py
+scipy==1.11.4
