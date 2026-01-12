@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# features/tifex.py
 """
 Run TIFEX feature extraction per precomputed window and write one row per window.
 """
@@ -16,21 +17,17 @@ from tifex_py.feature_extraction import settings, extraction
 
 
 # ---- Helper functions -----
-def ensure_dir_for_file(path: str) -> None:
-    d = os.path.dirname(os.path.abspath(path))
-    if d and not os.path.isdir(d):
-        os.makedirs(d, exist_ok=True)
-
 def flatten_axis_feature_df(feat_df: pd.DataFrame, prefix_sep: str = "__") -> Dict[str, float]:
     """
-    TIFEX returns a DataFrame indexed by axis (acc_x, acc_y, ...) and columns as features.
-    We flatten into { "acc_x__mean": value, ... } so we can store a single row per window.
+    Flatten TIFEX output:
+    index = signal name, columns = feature names
+    -> {signal__feature: value}
     """
     flat: Dict[str, float] = {}
     # index contains axis names; columns are feature names
-    for axis_name, row in feat_df.iterrows():
+    for signal_name, row in feat_df.iterrows():
         for feat_name, val in row.items():
-            flat[f"{axis_name}{prefix_sep}{feat_name}"] = val
+            flat[f"{signal_name}{prefix_sep}{feat_name}"] = val
     return flat
 
 # ---- Safe calculator selection -----
@@ -96,7 +93,7 @@ def choose_safe_spectral_calculators(fs: int) -> settings.SpectralFeatureParams:
     available = getattr(default, "calculators", None)
 
     if isinstance(available, list):
-        safe = [c for c in safe if c in available]
+        safe = [c for c in safe_candidates if c in available]
         return settings.SpectralFeatureParams(fs, calculators=safe)
 
     return default
@@ -120,6 +117,126 @@ def choose_safe_timefreq_calculators(fs: int) -> settings.TimeFrequencyFeaturePa
 
     return default
 
+# ---- Pure function ----
+def run_tifex(
+    data: pd.DataFrame,
+    windows: pd.DataFrame,
+    fs: int,
+    signal_cols: List[str],
+    feature_set: str = "stat",
+    safe: bool = True,
+    njobs: int = 1,
+    quiet: bool = True,
+) -> pd.DataFrame:
+    """
+    Run TIFEX feature extraction on pre-windowed signals.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Preprocessed signal data (indexed or row-based).
+    windows : pd.DataFrame
+        Window definitions with start_idx, end_idx.
+    fs : int
+        Sampling frequency in Hz.
+    signal_cols : list[str]
+        Signal columns to extract features from.
+    feature_set : {"stat", "spec", "tf", "all"}
+    safe : bool
+        Use conservative calculator subsets.
+    njobs : int
+        Parallel jobs for TIFEX.
+    quiet : bool
+        Suppress warnings.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per window, flattened feature columns.
+    """
+
+    fs = int(round(fs))
+
+    if quiet:
+        warnings.filterwarnings("ignore")
+
+    for c in ["start_idx", "end_idx"]:
+        if c not in windows.columns:
+            raise ValueError(f"Windows DataFrame missing '{c}'.")
+        
+    missing = [c for c in signal_cols if c not in data.columns]
+    if missing:
+        raise ValueError(f"Missing signal columns: {missing}")
+
+    # Feature params
+    if safe:
+        stat_params = choose_safe_stat_calculators(fs)
+        spec_params = choose_safe_spectral_calculators(fs)
+        tf_params = choose_safe_timefreq_calculators(fs)
+    else:
+        stat_params = settings.StatisticalFeatureParams(fs)
+        spec_params = settings.SpectralFeatureParams(fs)
+        tf_params = settings.TimeFrequencyFeatureParams(fs)
+
+    rows: List[Dict[str, float]] = []
+    
+    for i, w in windows.iterrows():
+        start = int(w.start_idx)
+        end = int(w.end_idx)
+        segment = data.iloc[start:end][signal_cols]
+
+        out = {
+            "window_id": i,
+            "start_idx": start,
+            "end_idx": end,
+            "valid": True,
+        }
+
+        # Optional metadata if present
+        for meta in ["t_start", "t_center", "t_end", "n_samples"]:
+            if meta in windows.columns:
+                out[meta] = w[meta]
+
+        # Guard against empty windows
+        if len(segment) == 0:
+            # fill nothing else; keep row so alignment stays correct
+            out["valid"] = False
+            rows.append(out)
+            continue
+
+        # Compute features
+        # TIFEX expects DataFrame with columns specified; output is indexed by column names
+        try:
+            if feature_set == "stat":
+                feats = extraction.calculate_statistical_features(segment, stat_params, columns=signal_cols, njobs=njobs)
+            elif feature_set == "spec":
+                feats = extraction.calculate_spectral_features(segment, spec_params, columns=signal_cols, njobs=njobs)
+            elif feature_set == "tf":
+                feats = extraction.calculate_time_frequency_features(segment, tf_params, columns=signal_cols, njobs=njobs)
+            elif feature_set == "all":
+                feats = extraction.calculate_all_features(
+                    segment, stat_params, spec_params, tf_params, columns=signal_cols, njobs=njobs
+                )
+            else:
+                raise ValueError(f"Unknown feature_set: {feature_set}")
+
+            if feats.empty:
+                out["valid"] = False
+            else:
+                out.update(flatten_axis_feature_df(feats))
+
+        except Exception as e:
+            # If something unexpected blows up (not just TIFEX internal NaNs),
+            # keep the window metadata and record the error string.
+            out["valid"] = False
+            out["error"] = str(e)
+
+        rows.append(out)
+
+    feats_df = pd.DataFrame(rows)
+
+    return feats_df
+    
 # ---- CLI ----
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Run TIFEX on pre-windowed signals.")
@@ -137,96 +254,30 @@ def parse_args() -> argparse.Namespace:
 # ---- Main ----
 def main() -> None:
     args = parse_args()
-    fs = int(round(float(args.fs)))
 
-    if args.quiet:
-        warnings.filterwarnings("ignore")
-
-    # Load raw data
     df = pd.read_csv(args.input)
     windows = pd.read_csv(args.windows)
+    signal_cols = [s.strip() for s in args.signals.split(",")]
 
-    if "t_sec" not in df.columns:
-        raise ValueError("Input data must contain 't_sec'.")
+    feat_df = run_tifex(
+        data=df,
+        windows=windows,
+        fs=int(args.fs),
+        signal_cols=signal_cols,
+        feature_set=args.features,
+        safe=args.safe,
+        njobs=args.njobs,
+        quiet=args.quiet,
+    )
 
-    for c in ["start_idx", "end_idx"]:
-        if c not in windows.columns:
-            raise ValueError(f"Windows file missing '{c}'.")
+    out_dir = os.path.dirname(os.path.abspath(args.out))
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+
+    feat_df.to_csv(args.out, index=False)
+
+    print(f"Wrote features for {len(feat_df)} windows to {args.out}")
+    print("Example:")
+    print(feat_df.head(3).to_string(index=False))
     
-    signal_cols = [c.strip() for c in args.signals.split(",")]
-    
-    missing = [c for c in signal_cols if c not in df.columns]
-    if missing:
-        raise ValueError(f"Missing signal columns: {missing}")
-    
-    # Feature params
-    if args.safe:
-        stat_params = choose_safe_stat_calculators(fs)
-        spec_params = choose_safe_spectral_calculators(fs)
-        tf_params = choose_safe_timefreq_calculators(fs)
-    else:
-        stat_params = settings.StatisticalFeatureParams(fs)
-        spec_params = settings.SpectralFeatureParams(fs)
-        tf_params = settings.TimeFrequencyFeatureParams(fs)
-
-    rows: List[Dict[str, float]] = []
-    
-    for i, w in windows.iterrows():
-        start = int(w.start_idx)
-        end= int(w.end_idx)
-        segment = df.iloc[start:end][signal_cols]
-
-        out = {
-            "window_id": i,
-            "start_idx": start,
-            "end_idx": end,
-        }
-
-        # Optional metadata if present
-        for meta in ["t_start", "t_end", "n_samples"]:
-            if meta in windows.columns:
-                out[meta] = w.loc[i, meta]
-
-        # Guard against empty windows
-        if len(segment) == 0:
-            # fill nothing else; keep row so alignment stays correct
-            rows.append(out)
-            continue
-
-        # Compute features
-        # TIFEX expects DataFrame with columns specified; output is indexed by column names
-        try:
-            if args.features == "stat":
-                feats = extraction.calculate_statistical_features(segment, stat_params, columns=signal_cols, njobs=args.njobs)
-            elif args.features == "spec":
-                feats = extraction.calculate_spectral_features(segment, spec_params, columns=signal_cols, njobs=args.njobs)
-            elif args.features == "tf":
-                feats = extraction.calculate_time_frequency_features(segment, tf_params, columns=signal_cols, njobs=args.njobs)
-            else:
-                feats = extraction.calculate_all_features(
-                    segment, stat_params, spec_params, tf_params, columns=signal_cols, njobs=args.njobs
-                )
-
-            out.update(flatten_axis_feature_df(feats))
-
-        except Exception as e:
-            # If something unexpected blows up (not just TIFEX internal NaNs),
-            # keep the window metadata and record the error string.
-            out["error"] = str(e)
-
-        rows.append(out)
-
-        # light progress
-        if (i + 1) % 200 == 0:
-            print(f"[tifex_from_windows] processed {i+1}/{windows} windows", file=sys.stderr)
-
-    out_df = pd.DataFrame(rows)
-    ensure_dir_for_file(args.out)
-    out_df.to_csv(args.out, index=False)
-
-    print(f"Wrote {len(out_df)} windows x features to: {args.out}")
-    print(f"Columns: {len(out_df.columns)}")
-
-
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()
