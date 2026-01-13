@@ -1,173 +1,108 @@
-import os
+import yaml
+from pathlib import Path
 import pandas as pd
+
 
 from preprocessing.imu import preprocess_imu
 from windowing.windows import create_windows
-from features.tifex import main as run_tifex_cli
+from features.tifex import run_tifex
 
-# Temporary config for testing
-CONFIG = {
-    "imu": {
-        "fs": 32,
-        "noise_cutoff": 5.0,
-        "gravity_cutoff": 0.3,
-        "signals_for_features": [
-            "acc_x_dyn",
-            "acc_y_dyn",
-            "acc_z_dyn",
-        ],
-    },
-    "window": {
-        "length_sec": 5.0,
-        "overlap": 0.7,
-    },
-    "tifex": {
-        "features": "stat",
-        "safe": True,
-        "njobs": 1,
-    },
-}
-
-# ---- Paths ----
-# Need to iterate through multiple files later
-RAW_IMU = "C:\\Users\\Nicla\\Documents\\ETHZ\\Lifelogging\\Data\\interim\\scai-ncgg\\parsingsim3\\sim_healthy_3\\corsano_bioz_acc\\2025-12-04.csv.gz"
-
-INTERIM_DIR = "C:\\Users\\Nicla\\Documents\\ETHZ\\Lifelogging\\Data\\interim\\imu"
-FEATURE_DIR = "C:\\Users\\Nicla\\Documents\\ETHZ\\Lifelogging\\Data\\features\\imu"
-
-IMU_PREPROCESSED = os.path.join(INTERIM_DIR, "imu_preprocessed.csv")
-IMU_WINDOWS = os.path.join(INTERIM_DIR, "imu_windows.csv")
-IMU_FEATURES = os.path.join(FEATURE_DIR, "imu_features.csv")
-
-# path = "C:\\Users\\Nicla\\Documents\\ETHZ\\Lifelogging\\Data\\interim\\scai-ncgg\\parsingsim3\\sim_healthy_3\\corsano_bioz_acc\\2025-12-04.csv.gz"
+def load_config(path: str) -> dict:
+    with open(path, "r") as f:
+        return yaml.safe_load(f)
 
 # ---- Pipeline ----
-# include validation?
-def run_imu_pipeline() -> None:
-    os.makedirs(INTERIM_DIR, exist_ok=True)
-    os.makedirs(FEATURE_DIR, exist_ok=True)
+def run_pipeline(config_path: str) -> None:
+    cfg = load_config(config_path)
 
-    # -------------------------
-    # Preprocessing
-    # -------------------------
-    print("▶ Preprocessing IMU")
+    output_root = Path(cfg["project"]["output_dir"])
+    output_root.mkdir(parents=True, exist_ok=True)
 
-    df_imu = preprocess_imu(
-        path=RAW_IMU,
-        fs_out=CONFIG["imu"]["fs"],
-        noise_cutoff=CONFIG["imu"]["noise_cutoff"],
-        gravity_cutoff=CONFIG["imu"]["gravity_cutoff"],
-    )
+    for dataset in cfg["datasets"]:
+        name = dataset["name"]
+        print(f"\n=== Processing dataset: {name} ===")
+        # -------------------------
+        # 1. IMU Preprocessing
+        # -------------------------
+        print("▶ Preprocessing IMU")
 
-    df_imu.to_csv(IMU_PREPROCESSED, index=False)
-    print(f"  Saved preprocessed IMU to {IMU_PREPROCESSED}")
+        imu_cfg = cfg["preprocessing"]["imu"]
+        imu_path = dataset["imu"]["path"]
+        fs_out = dataset["imu"]["fs_out"]
 
-    # -------------------------
-    # Windowing
-    # -------------------------
-    print("▶ Creating windows")
+        imu_df = preprocess_imu(
+            path=imu_path,
+            fs_out=fs_out,
+            noise_cutoff=imu_cfg["noise_cutoff"],
+            gravity_cutoff=imu_cfg["gravity_cutoff"],
+        )
 
-    windows = create_windows(
-        df=df_imu,
-        fs=CONFIG["imu"]["fs"],
-        win_sec=CONFIG["window"]["length_sec"],
-        overlap=CONFIG["window"]["overlap"],
-    )
+        imu_out_dir = output_root / name / "imu"
+        imu_out_dir.mkdir(parents=True, exist_ok=True)
 
-    windows.to_csv(IMU_WINDOWS, index=False)
-    print(f"  Saved windows to {IMU_WINDOWS}")
+        imu_clean_path = imu_out_dir / "imu_preprocessed.csv"
+        imu_df.to_csv(imu_clean_path, index=False)
+        print(f"  Saved preprocessed IMU to {imu_clean_path}")
 
-    # -------------------------
-    # Feature extraction (TIFEX)
-    # -------------------------
-    print("▶ Extracting features with TIFEX")
+        # -------------------------
+        # 2-3. Windowing + Feature extraction
+        # -------------------------
+        print("▶ Creating windows and extracting features")
+        feat_cfg = cfg["features"]["imu"]
 
-    # We invoke tifex via its CLI-compatible main
-    import sys
-    sys.argv = [
-        "tifex.py",
-        "--input", IMU_PREPROCESSED,
-        "--windows", IMU_WINDOWS,
-        "--out", IMU_FEATURES,
-        "--fs", str(CONFIG["imu"]["fs"]),
-        "--signals", ",".join(CONFIG["imu"]["signals_for_features"]),
-        "--features", CONFIG["tifex"]["features"],
-        "--njobs", str(CONFIG["tifex"]["njobs"]),
-    ]
+        for win_sec in cfg["windowing"]["window_lengths_sec"]:
+            print(f"  ▶ Window length: {win_sec}s")
 
-    if CONFIG["tifex"]["safe"]:
-        sys.argv.append("--safe")
+            windows_df = create_windows(
+                df=imu_df,
+                fs=fs_out,
+                win_sec=win_sec,
+                overlap=cfg["windowing"]["overlap"],
+            )
+        
+            print(f"    {len(windows_df)} windows created")
 
-    run_tifex_cli()
+            win_path = imu_out_dir / f"windows_{win_sec:.1f}s.csv"
+            windows_df.to_csv(win_path, index=False)
+            print(f"  Saved windows to {win_path}")
 
-    print(f"  Saved IMU features to {IMU_FEATURES}")
+            # ---- Feature extraction ----
+            print(f"  ▶ Feature extraction with Tifex")
+            feats_df = run_tifex(
+                data=imu_df,
+                windows=windows_df,
+                fs=fs_out,
+                signal_cols=feat_cfg["signals"],
+                feature_set=feat_cfg["feature_set"],
+                safe=feat_cfg["safe"],
+                njobs=feat_cfg["njobs"],
+            )
 
+            print(feats_df.head())
+            print("Rows:", len(feats_df))
+            print("Feature columns:", feats_df.filter(like="__").shape[1])
+            
+            # Add modality metadata column (from feature config if provided, otherwise 'imu')
+            modality = feat_cfg.get("modality", "unknown")
+            if "modality" not in feats_df.columns:
+                feats_df["modality"] = modality
+
+            print(
+                f"  ✓ IMU | {win_sec}s | "
+                f"{len(windows_df)} windows | "
+                f"{feats_df.shape[1]} features | "
+                f"modality={modality}"
+            )
+
+        # print(feats_df.shape[0], "feature rows created with", feats_df.shape[1], "features.")
+            feat_path = imu_out_dir / f"features_{win_sec:.1f}s.csv"
+            feats_df.to_csv(feat_path, index=False)
+
+        print(f"  Saved features to {feat_path}")
 
 # ---------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------
 
 if __name__ == "__main__":
-    run_imu_pipeline()
-    
-
-# def validate_preprocessing(df, fs):
-#     dt = np.diff(df["t_sec"].values)
-#     print("Unique dt:", np.unique(np.round(dt, 6)))
-
-#     assert np.allclose(dt, 1.0 / fs, rtol=1e-3), "Sampling rate mismatch"
-
-# def validate_windows(df, windows, fs, win_sec):
-#     expected_len = int(round(fs * win_sec))
-
-#     print("Window sample sizes:", windows["n_samples"].unique())
-#     assert windows["n_samples"].nunique() == 1
-#     assert windows["n_samples"].iloc[0] == expected_len
-
-#     print("Max end_idx:", windows["end_idx"].max(), "Data length:", len(df))
-#     assert windows["end_idx"].max() <= len(df)
-
-
-# df = preprocess_imu(path, fs_out=fs)
-# print("Preprocessed IMU data shape:", df.shape)
-
-# # --- Validation: sampling ---
-# validate_preprocessing(df, fs)
-
-# # --- Windowing ---
-# windows = create_windows(df, fs, win_sec, overlap)
-
-# # --- Validation: windows ---
-# validate_windows(df, windows, fs, win_sec)
-
-
-
-# signals = config["imu"]["signals"]["dynamic"]
-
-# if config["imu"]["signals"]["magnitude"]["enabled"]:
-#     add_magnitude()
-
-# def run_imu_pipeline(cfg):
-#     df = preprocess_imu(
-#         path=cfg["input"],
-#         fs_out=cfg["imu"]["fs"]
-#     )
-
-#     df.to_csv(cfg["interim_imu"], index=False)
-
-#     create_windows(
-#         input_csv=cfg["interim_imu"],
-#         fs=cfg["imu"]["fs"],
-#         win_sec=cfg["window"]["length"],
-#         overlap=cfg["window"]["overlap"],
-#         out_csv=cfg["windows_imu"]
-#     )
-
-#     run_tifex(
-#         input_csv=cfg["interim_imu"],
-#         windows_csv=cfg["windows_imu"],
-#         signals=cfg["imu"]["signals"]["dynamic"],
-#         fs=cfg["imu"]["fs"],
-#         out_csv=cfg["features_imu"]
-#     )
-
+    run_pipeline("config/pipeline.yaml")

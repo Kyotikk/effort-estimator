@@ -1,0 +1,17 @@
+input: 
+# config/training.yaml
+
+dataset:
+  imu_features_path: C:\Users\Nicla\Documents\ETHZ\Lifelogging\Data\interim\scai-ncgg\parsingsim3\sim_elderly_3\effort_estimation_output\parsingsim3_sim_elderly3\imu\features_10.0s.csv
+
+splits:
+  column: split
+  train: train
+  val: val
+  test: test
+  random_seed: 42
+
+normalisation:
+  imu:
+    method: standard
+    save_to: C:\Users\Nicla\Documents\ETHZ\Lifelogging\Data\models\scalers\imu_scaler.joblib
