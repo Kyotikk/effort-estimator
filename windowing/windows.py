@@ -68,6 +68,7 @@ def create_windows(
             "t_center": float(df["t_sec"].iloc[start + win_len // 2]),
             "t_end": float(df["t_sec"].iloc[end - 1]),
             "n_samples": win_len,
+            "win_sec": win_sec,
         })
 
     windows = pd.DataFrame(rows)

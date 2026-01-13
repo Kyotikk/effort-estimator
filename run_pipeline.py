@@ -67,7 +67,7 @@ def run_pipeline(config_path: str) -> None:
             print(f"  Saved windows to {win_path}")
 
             # ---- Feature extraction ----
-            # print(f"  ▶ Feature extraction with Tifex")
+            print(f"  ▶ Feature extraction with Tifex")
             feats_df = run_tifex(
                 data=imu_df,
                 windows=windows_df,
@@ -81,13 +81,17 @@ def run_pipeline(config_path: str) -> None:
             print(feats_df.head())
             print("Rows:", len(feats_df))
             print("Feature columns:", feats_df.filter(like="__").shape[1])
-            # assert feats_df.shape[0] == windows_df.shape[0], \
-            #     f"Mismatch: {feats_df.shape[0]} features vs {windows_df.shape[0]} windows"
             
+            # Add modality metadata column (from feature config if provided, otherwise 'imu')
+            modality = feat_cfg.get("modality", "unknown")
+            if "modality" not in feats_df.columns:
+                feats_df["modality"] = modality
+
             print(
                 f"  ✓ IMU | {win_sec}s | "
                 f"{len(windows_df)} windows | "
-                f"{feats_df.shape[1]} features"
+                f"{feats_df.shape[1]} features | "
+                f"modality={modality}"
             )
 
         # print(feats_df.shape[0], "feature rows created with", feats_df.shape[1], "features.")

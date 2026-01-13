@@ -21,10 +21,11 @@ preprocessing:
 
 windowing:
   overlap: 0.7
-  window_lengths_sec: [5, 10]
+  window_lengths_sec: [2]
 
 features:
   imu:
+    modality: imu
     signals:
       - acc_x_dyn
       - acc_y_dyn
