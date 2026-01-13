@@ -193,7 +193,7 @@ def run_tifex(
         }
 
         # Optional metadata if present
-        for meta in ["t_start", "t_center", "t_end", "n_samples"]:
+        for meta in ["t_start", "t_center", "t_end", "n_samples", "win_sec"]:
             if meta in windows.columns:
                 out[meta] = w[meta]
 
@@ -232,6 +232,10 @@ def run_tifex(
             out["error"] = str(e)
 
         rows.append(out)
+        
+        # light progress
+        if (i + 1) % 200 == 0:
+            print(f"[tifex_from_windows] processed {i+1}/{len(windows)} windows", file=sys.stderr)
 
     feats_df = pd.DataFrame(rows)
 
