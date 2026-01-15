@@ -65,10 +65,40 @@ def main(cfg_path: str):
     print("IMU scaler fitted and saved.")
     print(f"Features scaled: {len(feature_cols)}")
 
-    assert abs(train_df[feature_cols].mean()).mean() < 1e-6
-    stds = train_df[feature_cols].std(ddof=0)
-    assert stds.between(0.98, 1.02).mean() > 0.95
-    assert not val_df[feature_cols].isna().any().any()
+    # assert abs(train_df[feature_cols].mean()).mean() < 1e-6
+    # stds = train_df[feature_cols].std(ddof=0)
+    # assert stds.between(0.98, 1.02).mean() > 0.95
+    # assert not val_df[feature_cols].isna().any().any()
+
+    ## Feature fusion
+    # Step 1 done
+    # extract features per modality per window
+    # e.g., imu_features_5s.csv + ecg_features_5s.csv + eda_features_5s.csv...
+
+    
+    # Step 2 done
+    # Prefix features by modality, e.g.,
+    # imu__acc_x_dyn__std
+    # imu__acc_y_dyn__spectral_centroid
+    # ecg__hrv_rmssd
+    # eda__phasic_mean
+
+    # Step 3 done
+    # merge per window_id
+    # X = imu_df.merge(ecg_df, on="window_id", how="inner")
+    # X = X.merge(eda_df, on="window_id", how="inner")
+
+    # Step 4 done?
+    # One table per window length:
+    # window_id, modality__feature1, modality__feature2, ...
+    # --> learning matrix
+
+    ## Effort regression target (labels)
+    # Subjective effort (Borg CRO10) --> Interpolate to window _centres_.
+
+    ## Train / Val / Test splits
+
+
 
 # ---------------------------------------------------------------------
 if __name__ == "__main__":

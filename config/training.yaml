@@ -1,4 +1,4 @@
-input: 
+# input: 
 # config/training.yaml
 
 dataset:
@@ -15,3 +15,7 @@ normalisation:
   imu:
     method: standard
     save_to: C:\Users\Nicla\Documents\ETHZ\Lifelogging\Data\models\scalers\imu_scaler.joblib
+
+targets:
+  imu:
+    adl_path: D:\ETHZ\Lifelogging\raw\scai-ncgg\simulation\Sim_3\sim_elderly_3\scai_app\ADLs_1.csv
