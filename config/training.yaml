@@ -2,7 +2,7 @@
 # config/training.yaml
 
 dataset:
-  imu_features_path: C:\Users\Nicla\Documents\ETHZ\Lifelogging\Data\interim\scai-ncgg\parsingsim3\sim_elderly_3\effort_estimation_output\parsingsim3_sim_elderly3\imu\features_10.0s.csv
+  imu_features_path: C:\Users\Nicla\Documents\ETHZ\Lifelogging\Data\interim\scai-ncgg\parsingsim3\sim_elderly_3\effort_estimation_output\parsingsim3_sim_elderly3\imu_bioz\fused_features_10.0s.csv
 
 splits:
   column: split
@@ -14,8 +14,12 @@ splits:
 normalisation:
   imu:
     method: standard
-    save_to: C:\Users\Nicla\Documents\ETHZ\Lifelogging\Data\models\scalers\imu_scaler.joblib
+    save_to: C:\Users\Nicla\Documents\ETHZ\Lifelogging\Data\interim\scai-ncgg\parsingsim3\sim_elderly_3\effort_estimation_output\parsingsim3_sim_elderly3\imu_bioz_scaler.joblib
 
-targets:
-  imu:
-    adl_path: D:\ETHZ\Lifelogging\raw\scai-ncgg\simulation\Sim_3\sim_elderly_3\scai_app\ADLs_1.csv
+# model
+model:
+  input: C:\Users\Nicla\Documents\ETHZ\Lifelogging\Data\interim\scai-ncgg\parsingsim3\sim_elderly_3\effort_estimation_output\parsingsim3_sim_elderly3\fused_features_scaled.csv
+  type: ridge
+  parameters:
+    alpha: 1.0
+  
