@@ -5,9 +5,13 @@ project:
 
 datasets:
   - name: parsingsim3_sim_elderly3
-    imu:
+    imu_wrist:
       # path: data/raw/parsingsim3/sim_elderly_3/corsano_bioz_acc
       path: C:\\Users\\Nicla\\Documents\\ETHZ\\Lifelogging\\Data\\interim\\scai-ncgg\\parsingsim3\\sim_elderly_3\\corsano_wrist_acc\\2025-12-04.csv.gz
+      fs_out: 32
+    imu_bioz:
+      # path: data/raw/parsingsim3/sim_elderly_3/corsano_bioz_acc
+      path: C:\\Users\\Nicla\\Documents\\ETHZ\\Lifelogging\\Data\\interim\\scai-ncgg\\parsingsim3\\sim_elderly_3\\corsano_bioz_acc\\2025-12-04.csv.gz
       fs_out: 32
     ecg:
       path: data/raw/parsingsim3/sim_elderly_3/vivalnk_vv330_ecg
@@ -21,7 +25,7 @@ preprocessing:
 
 windowing:
   overlap: 0.7
-  window_lengths_sec: [2]
+  window_lengths_sec: [10, 5, 2]
 
 features:
   imu:
@@ -33,6 +37,18 @@ features:
     feature_set: stat
     safe: true
     njobs: 1
+
+targets:
+  imu:
+    adl_path: D:\ETHZ\Lifelogging\raw\scai-ncgg\simulation\Sim_3\sim_elderly_3\scai_app\ADLs_1.csv
+
+fusion:
+  output_dir: C:\Users\Nicla\Documents\ETHZ\Lifelogging\Data\interim\scai-ncgg\parsingsim3\sim_elderly_3\effort_estimation_output\parsingsim3_sim_elderly3\imu_bioz
+
+  modalities:
+    imu: C:\Users\Nicla\Documents\ETHZ\Lifelogging\Data\interim\scai-ncgg\parsingsim3\sim_elderly_3\effort_estimation_output\parsingsim3_sim_elderly3\imu_bioz\imu_aligned_{window_length}.csv
+
+  window_lengths_sec: [10.0, 5.0, 2.0]
 
 logging:
   verbose: true
