@@ -202,14 +202,17 @@ def parse_adl_intervals(adl_csv: Path) -> pd.DataFrame:
 
     intervals = []
     current = {}
-
     for _, row in df.iterrows():
         label = str(row["event"])
         if label.endswith("Start"):
             current = {"activity": label.replace(" Start", ""), "t_start": row["t_sec"]}
-        elif label.endswith("End") and not pd.isna(row["borg"]):
+        elif label.endswith("End"):
             current["t_end"] = row["t_sec"]
-            current["borg"] = float(row["borg"])
+            # Only add borg if column exists and value is not NaN
+            if "borg" in df.columns and not pd.isna(row["borg"]):
+                current["borg"] = float(row["borg"])
+            else:
+                current["borg"] = np.nan
             intervals.append(current)
             current = {}
 
