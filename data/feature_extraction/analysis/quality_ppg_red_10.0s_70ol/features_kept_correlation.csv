@@ -1,15 +1,13 @@
 ppg_red_mean
+ppg_red_min
 ppg_red_max
 ppg_red_median
-ppg_red_iqr
+ppg_red_mad
 ppg_red_skew
 ppg_red_kurtosis
 ppg_red_diff_mean
-ppg_red_diff_mean_abs
 ppg_red_signal_energy
 ppg_red_zcr
-ppg_red_p1
-ppg_red_p5
 ppg_red_trim_mean_10
 ppg_red_crest_factor
 ppg_red_shape_factor

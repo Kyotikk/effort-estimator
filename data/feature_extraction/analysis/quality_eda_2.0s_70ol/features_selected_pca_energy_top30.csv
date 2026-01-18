@@ -1,10 +1,10 @@
-eda_stress_skin_slope
-eda_cc_slope
-eda_cc_max
 eda_stress_skin_skew
+eda_cc_slope
+eda_cc_mad
 eda_stress_skin_kurtosis
-eda_stress_skin_std
-eda_cc_kurtosis
+eda_cc_min
 eda_stress_skin_min
+eda_stress_skin_range
 eda_cc_skew
-eda_cc_mean_abs_diff
+eda_stress_skin_slope
+eda_cc_kurtosis

@@ -19,28 +19,50 @@ SUBJECTS = ["sim_elderly3", "sim_healthy3", "sim_severe3"]
 WINDOW_LENGTH = 10.0
 
 
-def find_file(subject_path, pattern_parts):
-    """Find a file matching pattern parts in subject directory."""
+def find_file(subject_path, pattern_parts, exclude_gz=False):
+    """Find a file matching pattern parts in subject directory.
+    
+    For multiple matches, prefers the most recently modified file.
+    If exclude_gz=True, prioritizes uncompressed .csv over .csv.gz files.
+    """
     base = Path(subject_path)
-    for part in pattern_parts:
+    for i, part in enumerate(pattern_parts):
         matches = list(base.glob(f"*{part}*"))
         if not matches:
             return None
+        
+        # If this is the last part AND exclude_gz is True, filter out .gz files
+        if i == len(pattern_parts) - 1 and exclude_gz:
+            matches = [m for m in matches if not str(m).endswith('.gz')]
+        
+        # If no matches after filtering, return None
+        if not matches:
+            return None
+        
+        # Sort by modification time and pick the most recent
+        matches.sort(key=lambda x: x.stat().st_mtime, reverse=True)
         base = matches[0]
     
-    # If we end up with a directory, find the .csv or .csv.gz file inside
-    # Prefer uncompressed .csv over .csv.gz
+    # If we end up with a directory, find the actual file inside
     if base.is_dir():
-        csv_files = list(base.glob("*.csv"))
-        if csv_files:
-            # Return the most recent uncompressed file
-            csv_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-            return str(csv_files[0])
-        # Fall back to .csv.gz if no uncompressed files
-        csv_gz_files = list(base.glob("*.csv.gz"))
-        if csv_gz_files:
-            csv_gz_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-            return str(csv_gz_files[0])
+        if exclude_gz:
+            # Prioritize uncompressed .csv over .csv.gz
+            csv_files = [f for f in base.glob("*.csv") if not str(f).endswith('.csv.gz')]
+            if csv_files:
+                csv_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+                return str(csv_files[0])
+            return None
+        
+        # Standard search: try uncompressed .csv first, then .csv.gz
+        uncompressed = [f for f in base.glob("*.csv") if not str(f).endswith('.csv.gz')]
+        if uncompressed:
+            uncompressed.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            return str(uncompressed[0])
+        
+        gz_files = sorted(base.glob("*.csv.gz"), key=lambda x: x.stat().st_mtime, reverse=True)
+        if gz_files:
+            return str(gz_files[0])
+        
         return None
     
     return str(base)
@@ -60,7 +82,7 @@ def generate_config(subject):
     ppg_red_path = find_file(subject_path, ["corsano_wrist_ppg2_red"])
     eda_path = find_file(subject_path, ["corsano_bioz_emography"])
     rr_path = find_file(subject_path, ["corsano_bioz_rr_interval"])
-    adl_path = find_file(subject_path, ["scai_app", "ADLs"])
+    adl_path = find_file(subject_path, ["scai_app", "ADLs"], exclude_gz=True)
     
     # Verify all files exist
     required_files = {
