@@ -46,8 +46,20 @@ def run_alignment(
     # -------------------------
     intervals = parse_adl_intervals(adl_path)
 
+    # Filter windows to only those within ADL recording time range
+    adl_t_start = intervals['t_start'].min()
+    adl_t_end = intervals['t_end'].max()
+    windows_in_range = windows[
+        (windows['t_center'] >= adl_t_start) & 
+        (windows['t_center'] <= adl_t_end)
+    ].copy()
+    
+    print(f"  ADL recording time: {adl_t_start:.1f} to {adl_t_end:.1f}")
+    print(f"  Windows before filtering: {len(windows)}")
+    print(f"  Windows in ADL time range: {len(windows_in_range)}")
+
     windows_labeled = align_windows_to_borg(
-        windows=windows,
+        windows=windows_in_range,
         intervals=intervals,
     )
 
@@ -79,6 +91,13 @@ def run_alignment(
     cols_to_drop = [c for c in meta_cols if c in features.columns and c not in merge_keys]
     if cols_to_drop:
         features = features.drop(columns=cols_to_drop)
+
+    # Also filter features to only those in time range (for fused data with merged features)
+    if 't_center' in features.columns:
+        features = features[
+            (features['t_center'] >= adl_t_start) & 
+            (features['t_center'] <= adl_t_end)
+        ].copy()
 
     Xy = features.merge(
         windows_labeled[meta_cols],

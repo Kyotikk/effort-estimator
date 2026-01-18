@@ -16,5 +16,5 @@ ppg_infra_median
 ppg_infra_zcr
 ppg_infra_ddx_mean
 ppg_infra_mean_cross_rate
-ppg_infra_diff_mean
+ppg_infra_dx_mean
 ppg_infra_trim_mean_10
