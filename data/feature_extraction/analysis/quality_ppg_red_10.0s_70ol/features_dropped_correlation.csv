@@ -1,8 +1,8 @@
 feature,reason,value
+ppg_red_signal_rms,|corr|>=0.95,1.0
+ppg_red_tke_mean_abs,|corr|>=0.95,1.0
 ppg_red_diff_std,|corr|>=0.95,1.0
-ppg_red_tke_mean,|corr|>=0.95,1.0
 ppg_red_dx_mean,|corr|>=0.95,1.0
-ppg_red_rms,|corr|>=0.95,1.0
 ppg_red_diff_rms,|corr|>=0.95,0.9999998942129911
 ppg_red_std,|corr|>=0.95,0.9999993422198687
 ppg_red_mad,|corr|>=0.95,0.998841550558053
@@ -10,7 +10,7 @@ ppg_red_p90_p10,|corr|>=0.95,0.9934321054639849
 ppg_red_p95_p5,|corr|>=0.95,0.9901363846169012
 ppg_red_mean_abs,|corr|>=0.95,0.986400401825021
 ppg_red_dx_std,|corr|>=0.95,0.9842326057357488
-ppg_red_signal_rms,|corr|>=0.95,0.9828109248183898
+ppg_red_rms,|corr|>=0.95,0.98281092481839
 ppg_red_p99_p1,|corr|>=0.95,0.9813612247395215
 ppg_red_min,|corr|>=0.95,0.9772283744581679
 ppg_red_range,|corr|>=0.95,0.9735090875723917

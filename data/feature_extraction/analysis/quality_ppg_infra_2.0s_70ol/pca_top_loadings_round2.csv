@@ -1,7 +1,7 @@
 PC,feature,abs_loading
 PC1,ppg_infra_tke_p95_abs,0.3596073410686784
 PC1,ppg_infra_ddx_std,0.35474312044722306
-PC1,ppg_infra_tke_mean_abs,0.34353074537335
+PC1,ppg_infra_tke_mean,0.34353074537335
 PC1,ppg_infra_p95,0.3383748169250248
 PC1,ppg_infra_p5,0.33789228679299654
 PC1,ppg_infra_signal_energy,0.3329504773468627
@@ -61,5 +61,5 @@ PC8,ppg_infra_skew,0.28853496174222787
 PC8,ppg_infra_mean,0.28373134393982774
 PC8,ppg_infra_ddx_kurtosis,0.27564108004914173
 PC8,ppg_infra_tke_std,0.2597183146698644
-PC8,ppg_infra_tke_mean_abs,0.21066807765214085
+PC8,ppg_infra_tke_mean,0.21066807765214085
 PC8,ppg_infra_mean_cross_rate,0.15258834160557183

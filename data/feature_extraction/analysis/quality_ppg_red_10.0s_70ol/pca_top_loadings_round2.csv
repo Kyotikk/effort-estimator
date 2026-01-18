@@ -1,7 +1,7 @@
 PC,feature,abs_loading
 PC1,ppg_red_p1,0.341969836055159
 PC1,ppg_red_ddx_std,0.337137101070752
-PC1,ppg_red_tke_mean_abs,0.33444716922681217
+PC1,ppg_red_tke_mean,0.33444716922681217
 PC1,ppg_red_p5,0.33360565891446897
 PC1,ppg_red_diff_mean_abs,0.33303480314157186
 PC1,ppg_red_max,0.3298020622998267
@@ -25,7 +25,7 @@ PC3,ppg_red_diff_mean,0.06428237596141169
 PC3,ppg_red_dx_kurtosis,0.04121150591839706
 PC4,ppg_red_zcr,0.6812698033116324
 PC4,ppg_red_mean_cross_rate,0.6689179768561944
-PC4,ppg_red_tke_mean_abs,0.11901811925754298
+PC4,ppg_red_tke_mean,0.11901811925754298
 PC4,ppg_red_ddx_std,0.11490130239763158
 PC4,ppg_red_tke_std,0.107608304963393
 PC4,ppg_red_crest_factor,0.10390826729908202

@@ -1,8 +1,8 @@
 feature,reason,value
 ppg_red_signal_rms,|corr|>=0.95,1.0
 ppg_red_tke_mean_abs,|corr|>=0.95,1.0
-ppg_red_dx_mean,|corr|>=0.95,1.0
 ppg_red_dx_std,|corr|>=0.95,1.0
+ppg_red_dx_mean,|corr|>=0.95,1.0
 ppg_red_diff_rms,|corr|>=0.95,0.9999991508402551
 ppg_red_std,|corr|>=0.95,0.9999912443723684
 ppg_red_mad,|corr|>=0.95,0.9965725848265038

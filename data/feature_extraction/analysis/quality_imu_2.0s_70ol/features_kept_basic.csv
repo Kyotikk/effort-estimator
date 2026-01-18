@@ -24,6 +24,7 @@ acc_z_dyn__harmonic_mean_of_abs
 acc_x_dyn__approximate_entropy_0.1
 acc_y_dyn__quantile_0.3
 acc_z_dyn__lower_complete_moment
+acc_x_dyn__harmonic_mean
 acc_x_dyn__katz_fractal_dimension
 acc_z_dyn__katz_fractal_dimension
 acc_x_dyn__approximate_entropy_0.9

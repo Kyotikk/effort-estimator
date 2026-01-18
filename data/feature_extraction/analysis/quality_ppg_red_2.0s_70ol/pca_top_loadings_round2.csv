@@ -6,7 +6,7 @@ PC1,ppg_red_p10,0.332613126288663
 PC1,ppg_red_p90,0.3316769069531833
 PC1,ppg_red_signal_energy,0.3314096047521669
 PC1,ppg_red_iqr,0.3231203746028471
-PC1,ppg_red_tke_mean_abs,0.3155521475679648
+PC1,ppg_red_tke_mean,0.3155521475679648
 PC2,ppg_red_impulse_factor,0.4410365832663897
 PC2,ppg_red_kurtosis,0.4235305813296099
 PC2,ppg_red_shape_factor,0.41293638644967895
@@ -19,7 +19,7 @@ PC3,ppg_red_mean_cross_rate,0.6467824887993058
 PC3,ppg_red_zcr,0.6388314724575505
 PC3,ppg_red_ddx_kurtosis,0.23739270533883983
 PC3,ppg_red_dx_kurtosis,0.16721052186856142
-PC3,ppg_red_tke_mean_abs,0.1409719248128265
+PC3,ppg_red_tke_mean,0.1409719248128265
 PC3,ppg_red_ddx_std,0.12078129995639349
 PC3,ppg_red_tke_std,0.11488372341600275
 PC3,ppg_red_diff_mean_abs,0.10338164022670132
@@ -51,12 +51,12 @@ PC7,ppg_red_dx_mean,0.9127445000579723
 PC7,ppg_red_skew,0.3150268228681462
 PC7,ppg_red_tke_std,0.09664483598172824
 PC7,ppg_red_trim_mean_10,0.0965358634896408
-PC7,ppg_red_tke_mean_abs,0.0861757713210469
+PC7,ppg_red_tke_mean,0.0861757713210469
 PC7,ppg_red_ddx_mean,0.08251913220871537
 PC7,ppg_red_zcr,0.08246035838435982
 PC7,ppg_red_mean_cross_rate,0.07159298538334687
 PC8,ppg_red_tke_std,0.5420202357913748
-PC8,ppg_red_tke_mean_abs,0.4325673219486011
+PC8,ppg_red_tke_mean,0.4325673219486011
 PC8,ppg_red_ddx_kurtosis,0.353696404537431
 PC8,ppg_red_iqr,0.29247420065359103
 PC8,ppg_red_p10,0.23267397195627765

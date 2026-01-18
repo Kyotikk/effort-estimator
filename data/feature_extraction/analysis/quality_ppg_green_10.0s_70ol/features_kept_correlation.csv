@@ -3,6 +3,7 @@ ppg_green_iqr
 ppg_green_mad
 ppg_green_skew
 ppg_green_kurtosis
+ppg_green_diff_mean
 ppg_green_diff_mean_abs
 ppg_green_p10
 ppg_green_p95
@@ -15,7 +16,6 @@ ppg_green_clearance_factor
 ppg_green_mean_cross_rate
 ppg_green_tke_std
 ppg_green_tke_p95_abs
-ppg_green_dx_mean
 ppg_green_ddx_mean
 ppg_green_dx_kurtosis
 ppg_green_ddx_kurtosis
