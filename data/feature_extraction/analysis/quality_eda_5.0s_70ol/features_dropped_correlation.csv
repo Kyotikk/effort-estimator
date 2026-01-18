@@ -1,0 +1,17 @@
+feature,reason,value
+eda_cc_mean,|corr|>=0.95,0.9999999999999536
+eda_cc_median,|corr|>=0.95,0.9999999994563694
+eda_stress_skin_rms,|corr|>=0.95,0.9999992288142435
+eda_stress_skin_mean,|corr|>=0.95,0.9999991771786558
+eda_cc_min,|corr|>=0.95,0.9999989757380815
+eda_cc_rms,|corr|>=0.95,0.99999897382192
+eda_cc_range,|corr|>=0.95,0.9999594072314577
+eda_cc_mad,|corr|>=0.95,0.9999000836390847
+eda_cc_std,|corr|>=0.95,0.9998487842396871
+eda_stress_skin_range,|corr|>=0.95,0.9998026947874379
+eda_stress_skin_max,|corr|>=0.95,0.999642807038971
+eda_stress_skin_median,|corr|>=0.95,0.9996303069770097
+eda_stress_skin_iqr,|corr|>=0.95,0.9995962836927941
+eda_cc_iqr,|corr|>=0.95,0.9994792454933226
+eda_stress_skin_mean_abs_diff,|corr|>=0.95,0.9989718183683874
+eda_stress_skin_mad,|corr|>=0.95,0.9981683148558033

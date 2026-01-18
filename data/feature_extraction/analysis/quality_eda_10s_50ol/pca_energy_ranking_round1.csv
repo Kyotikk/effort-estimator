@@ -1,0 +1,11 @@
+feature,pca_energy_score
+eda_phasic_mean,0.26696528138718834
+eda_stress_skin_median,0.2627927290499986
+eda_stress_skin_slope,0.25817349442634974
+eda_tonic_mad,0.2526993804948272
+eda_phasic_peak_prom_mean,0.24923442630337353
+eda_tonic_median,0.24906360383923615
+eda_stress_skin_mad,0.24863019072331285
+eda_phasic_interpeak_mean_sec,0.2380868312498431
+eda_phasic_dom_freq_hz,0.2274879419300586
+eda_EDA_Phasic__number_peaks__n_5,0.22089524759926085

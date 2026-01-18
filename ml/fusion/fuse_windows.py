@@ -1,114 +1,138 @@
 # ml/fusion/fuse_windows.py
 
-from typing import Dict, List
+from __future__ import annotations
+
+from typing import List, Optional, Tuple
 import pandas as pd
 
-
-REQUIRED_WINDOW_COLS = [
+# Columns describing the window itself, not physiological features
+META_COLS = {
     "window_id",
+    "start_idx",
+    "end_idx",
     "t_start",
     "t_center",
     "t_end",
     "modality",
-    "borg",
-]
+}
 
 
-def _validate_feature_table(df: pd.DataFrame, modality: str) -> None:
-    missing = set(REQUIRED_WINDOW_COLS) - set(df.columns)
-    if missing:
-        raise ValueError(
-            f"[{modality}] Missing required window columns: {missing}"
-        )
-
-    if df["window_id"].duplicated().any():
-        raise ValueError(
-            f"[{modality}] Duplicate window_id entries detected"
-        )
+def _feature_cols(df: pd.DataFrame, join_cols: List[str]) -> List[str]:
+    """
+    Return true feature columns from a table (exclude join + meta).
+    """
+    drop = set(join_cols) | META_COLS
+    return [c for c in df.columns if c not in drop]
 
 
-def _prefix_feature_columns(
-    df: pd.DataFrame,
-    modality: str,
-    metadata_cols: List[str],
+def _fuse_two_feature_tables(
+    left: pd.DataFrame,
+    right: pd.DataFrame,
+    join_col: str = "t_center",
+    tolerance_sec: Optional[float] = None,
+    direction: str = "nearest",
+    suffixes: Tuple[str, str] = ("", "_r"),
 ) -> pd.DataFrame:
-    rename_map = {}
+    """
+    Fuse two feature tables by a time-like join column (default: t_center).
 
-    for col in df.columns:
-        if col in metadata_cols:
+    - Keeps left's meta columns as canonical.
+    - Excludes window meta from the "right feature" subset, so we never
+      drop based on start_idx / end_idx / t_* / window_id.
+    - Handles suffixed right-side feature columns after merge_asof.
+    """
+
+    if join_col not in left.columns or join_col not in right.columns:
+        raise RuntimeError(
+            f"Missing join_col={join_col}. "
+            f"left_has={join_col in left.columns} right_has={join_col in right.columns}"
+        )
+
+    # Ensure sorted by join column for merge_asof
+    left = left.sort_values(join_col).reset_index(drop=True)
+    right = right.sort_values(join_col).reset_index(drop=True)
+
+    # Time-based merge
+    merge_kwargs = dict(
+        left=left,
+        right=right,
+        on=join_col,
+        direction=direction,
+        suffixes=suffixes,
+    )
+    if tolerance_sec is not None:
+        merge_kwargs["tolerance"] = tolerance_sec
+
+    fused = pd.merge_asof(**merge_kwargs)
+
+    # Identify right-side true feature columns (no join/meta)
+    right_feats = _feature_cols(right, join_cols=[join_col])
+
+    # Map them to actual column names in the fused table
+    existing = set(fused.columns)
+    right_feats_in_fused: List[str] = []
+
+    for c in right_feats:
+        if c in existing:
+            right_feats_in_fused.append(c)
             continue
-        rename_map[col] = f"{modality}__{col}"
 
-    return df.rename(columns=rename_map)
+        # Common case: merge_asof added suffix for right side
+        cand = f"{c}{suffixes[1]}"
+        if cand in existing:
+            right_feats_in_fused.append(cand)
+
+    # If we have right-side features, drop rows where ALL of them are NaN
+    if right_feats_in_fused:
+        fused = fused.dropna(subset=right_feats_in_fused, how="all").reset_index(drop=True)
+    else:
+        fused = fused.reset_index(drop=True)
+
+    return fused
 
 
 def fuse_feature_tables(
-    feature_tables: Dict[str, pd.DataFrame],
-    metadata_cols: List[str] = None,
+    tables: List[pd.DataFrame],
+    join_col: str = "t_center",
+    tolerance_sec: Optional[float] = None,
+    direction: str = "nearest",
+    suffixes: Tuple[str, str] = ("", "_r"),
 ) -> pd.DataFrame:
     """
-    Fuse window-aligned feature tables from multiple modalities.
+    Backwards-compatible multi-table fusion API.
 
-    Parameters
-    ----------
-    feature_tables : dict
-        Mapping modality name -> feature DataFrame
-    metadata_cols : list of str, optional
-        Columns preserved without prefixing
-        Defaults to window timing columns
+    This matches what `ml/run_fusion.py` expects:
 
-    Returns
-    -------
-    pd.DataFrame
-        Fused feature table (one row per window)
-    """
-    if not feature_tables:
-        raise ValueError("No feature tables provided for fusion")
-
-    if metadata_cols is None:
-        metadata_cols = REQUIRED_WINDOW_COLS.copy()
-
-    fused = None
-
-    for modality, df in feature_tables.items():
-        _validate_feature_table(df, modality)
-
-        df = df.copy()
-
-        # Keep metadata columns + features only
-        keep_cols = metadata_cols + [
-            c for c in df.columns if c not in metadata_cols
-        ]
-        df = df.loc[:, keep_cols]
-
-        df = _prefix_feature_columns(
-            df=df,
-            modality=modality,
-            metadata_cols=metadata_cols,
+        fused = fuse_feature_tables(
+            tables=[imu_df, ppg_df, eda_df],
+            join_col="t_center",
+            tolerance_sec=...,
+            direction="nearest",
         )
 
-        if fused is None:
-            fused = df
-        else:
-            before = len(fused)
-            fused = fused.merge(
-                df,
-                on=metadata_cols,
-                how="inner",
-                validate="one_to_one",
-            )
-            after = len(fused)
+    Internally we fuse sequentially:
+      (((table[0] ⨝ table[1]) ⨝ table[2]) ⨝ ...)
 
-            if after == 0:
-                raise RuntimeError(
-                    f"Fusion failed: no overlapping windows after adding modality '{modality}'"
-                )
+    Each step uses the improved _fuse_two_feature_tables that:
+      - treats META_COLS as non-features
+      - only drops rows where all right-side *features* are NaN
+    """
 
-            if after < before:
-                print(
-                    f"[fusion] Warning: dropped {before - after} windows "
-                    f"when merging modality '{modality}'"
-                )
+    if not tables:
+        raise ValueError("fuse_feature_tables: 'tables' list is empty")
 
-    assert fused is not None
+    if len(tables) == 1:
+        return tables[0].copy()
+
+    fused = tables[0]
+    for t in tables[1:]:
+        fused = _fuse_two_feature_tables(
+            left=fused,
+            right=t,
+            join_col=join_col,
+            tolerance_sec=tolerance_sec,
+            direction=direction,
+            suffixes=suffixes,
+        )
+
     return fused

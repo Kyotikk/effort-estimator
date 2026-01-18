@@ -1,6 +1,6 @@
 numpy
 pandas
-yaml
+PyYaml
 scipy.signal
 argparse
 os

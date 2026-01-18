@@ -1,0 +1,12 @@
+{
+  "model_version": "v2.0",
+  "dataset": "fused_aligned_10.0s",
+  "n_samples": 429,
+  "n_train": 343,
+  "n_test": 86,
+  "n_features": 208,
+  "train_r2": 0.9999541853924252,
+  "train_rmse": 0.01269141200760086,
+  "test_r2": 0.9281904882214856,
+  "test_rmse": 0.4978332714390952
+}

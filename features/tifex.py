@@ -2,42 +2,95 @@
 # features/tifex.py
 """
 Run TIFEX feature extraction per precomputed window and write one row per window.
+
+Supports:
+- safe mode (conservative stat/spec/tf subsets)
+- top mode (compute ONLY the stat calculators needed for a fixed allowlist of columns,
+  and optionally filter output to exactly those columns)
 """
 
 import argparse
 import os
 import sys
 import warnings
-from typing import Dict, List
+from typing import Dict, List, Optional, Set
 
-import numpy as np
 import pandas as pd
 
 from tifex_py.feature_extraction import settings, extraction
 
 
-# ---- Helper functions -----
+# ----------------------------
+# Top feature allowlist (EXACT columns as in your screenshot)
+# ----------------------------
+TOP_FEATURE_COLUMNS: List[str] = [
+    "acc_x_dyn__harmonic_mean_of_abs",
+    "acc_x_dyn__quantile_0.4",
+    "acc_z_dyn__approximate_entropy_0.1",
+    "acc_z_dyn__quantile_0.4",
+    "acc_x_dyn__sample_entropy",
+    "acc_y_dyn__harmonic_mean_of_abs",
+    "acc_y_dyn__sample_entropy",
+    "acc_z_dyn__sum_of_absolute_changes",
+    "acc_y_dyn__avg_amplitude_change",
+    "acc_z_dyn__quantile_0.6",
+    "acc_z_dyn__variance_of_absolute_differences",
+    "acc_x_dyn__quantile_0.6",
+    "acc_z_dyn__sample_entropy",
+    "acc_y_dyn__variance_of_absolute_differences",
+    "acc_x_dyn__max",
+    "acc_y_dyn__quantile_0.4",
+    "acc_y_dyn__tsallis_entropy",
+    "acc_y_dyn__katz_fractal_dimension",
+    "acc_x_dyn__cardinality",
+    "acc_x_dyn__variance_of_absolute_differences",
+    "acc_x_dyn__quantile_0.3",
+    "acc_x_dyn__quantile_0.9",
+    "acc_z_dyn__harmonic_mean_of_abs",
+    "acc_x_dyn__approximate_entropy_0.1",
+    "acc_y_dyn__quantile_0.3",
+    "acc_z_dyn__lower_complete_moment",
+    "acc_x_dyn__harmonic_mean",
+    "acc_x_dyn__katz_fractal_dimension",
+    "acc_z_dyn__katz_fractal_dimension",
+    "acc_x_dyn__approximate_entropy_0.9",
+]
+TOP_FEATURE_SET: Set[str] = set(TOP_FEATURE_COLUMNS)
+
+
+# ----------------------------
+# Helper functions
+# ----------------------------
 def flatten_axis_feature_df(feat_df: pd.DataFrame, prefix_sep: str = "__") -> Dict[str, float]:
     """
     Flatten TIFEX output:
-    index = signal name, columns = feature names
-    -> {signal__feature: value}
+      index = signal name (e.g., acc_x_dyn)
+      columns = feature names (e.g., mean, quantile_0.4)
+    -> {signal__feature: value}  (e.g., acc_x_dyn__quantile_0.4)
     """
     flat: Dict[str, float] = {}
-    # index contains axis names; columns are feature names
     for signal_name, row in feat_df.iterrows():
         for feat_name, val in row.items():
             flat[f"{signal_name}{prefix_sep}{feat_name}"] = val
     return flat
 
-# ---- Safe calculator selection -----
+
+def _available_calculators(param_obj) -> Optional[List[str]]:
+    """
+    Try to read calculators list from a params object.
+    Some versions expose .calculators, others might not.
+    """
+    available = getattr(param_obj, "calculators", None)
+    return available if isinstance(available, list) else None
+
+
+# ----------------------------
+# Calculator selection
+# ----------------------------
 def choose_safe_stat_calculators(fs: int) -> settings.StatisticalFeatureParams:
     """
-    Conservative "safe" statistical feature subset to avoid the common error-prone ones
-    (HFD, moving_average, cardinality, hurst_exponent, etc.).
+    Conservative statistical subset (generic safe baseline).
     """
-    # This list is intentionally conservative.
-    # If TIFEX doesn't recognize a name, we'll filter it below after we inspect defaults.
     safe_candidates = [
         "mean",
         "mean_of_abs",
@@ -62,22 +115,36 @@ def choose_safe_stat_calculators(fs: int) -> settings.StatisticalFeatureParams:
         "large_std",
     ]
 
-    # Build a default params object so we can discover which calculators are available
     default = settings.StatisticalFeatureParams(fs)
-    available = getattr(default, "calculators", None)
+    available = _available_calculators(default)
+    if available is None:
+        return default
 
-    if isinstance(available, list):
-        safe = [c for c in safe_candidates if c in available]
-        # If none matched (unexpected), fall back to defaults (but we'll get NaNs for some features)
-        return settings.StatisticalFeatureParams(fs, calculators=safe)
+    chosen = [c for c in safe_candidates if c in available]
+    return settings.StatisticalFeatureParams(fs, calculators=chosen)
 
-    # If the installed version doesn't expose calculators as a list, just return defaults.
-    return default
+
+def choose_top_stat_calculators(fs: int) -> settings.StatisticalFeatureParams:
+    """
+    Compute ONLY the statistical calculators needed to produce TOP_FEATURE_COLUMNS.
+    Note: calculators are feature-name only (e.g. "quantile_0.4"), NOT axis-prefixed.
+    """
+    # Extract feature-name part after the first "__"
+    # acc_x_dyn__quantile_0.4 -> quantile_0.4
+    top_calculators = sorted({name.split("__", 1)[1] for name in TOP_FEATURE_COLUMNS})
+
+    default = settings.StatisticalFeatureParams(fs)
+    available = _available_calculators(default)
+    if available is None:
+        return default
+
+    chosen = [c for c in top_calculators if c in available]
+    return settings.StatisticalFeatureParams(fs, calculators=chosen)
 
 
 def choose_safe_spectral_calculators(fs: int) -> settings.SpectralFeatureParams:
     """
-    Conservative safe spectral subset.
+    Conservative spectral subset.
     """
     safe_candidates = [
         "spectral_variance",
@@ -90,25 +157,25 @@ def choose_safe_spectral_calculators(fs: int) -> settings.SpectralFeatureParams:
     ]
 
     default = settings.SpectralFeatureParams(fs)
-    available = getattr(default, "calculators", None)
+    available = _available_calculators(default)
+    if available is None:
+        return default
 
-    if isinstance(available, list):
-        safe = [c for c in safe_candidates if c in available]
-        return settings.SpectralFeatureParams(fs, calculators=safe)
-
-    return default
+    chosen = [c for c in safe_candidates if c in available]
+    return settings.SpectralFeatureParams(fs, calculators=chosen)
 
 
-def choose_safe_timefreq_calculators(fs: int) -> settings.TimeFrequencyFeatureParams:
+def choose_safe_timefreq_calculators(fs: int, stat_params: settings.StatisticalFeatureParams) -> settings.TimeFrequencyFeatureParams:
     """
     Conservative time-frequency subset: only TKEO representation (usually robust),
-    and use safe statistical params for the representation.
+    with provided stat_params for the representation.
     """
-    stat_params = choose_safe_stat_calculators(fs)
     default = settings.TimeFrequencyFeatureParams(fs)
+    available = _available_calculators(default)
+    if available is None:
+        return default
 
-    available = getattr(default, "calculators", None)
-    if isinstance(available, list) and "tkeo_features" in available:
+    if "tkeo_features" in available:
         return settings.TimeFrequencyFeatureParams(
             fs,
             calculators=["tkeo_features"],
@@ -117,7 +184,10 @@ def choose_safe_timefreq_calculators(fs: int) -> settings.TimeFrequencyFeaturePa
 
     return default
 
-# ---- Pure function ----
+
+# ----------------------------
+# Core runner
+# ----------------------------
 def run_tifex(
     data: pd.DataFrame,
     windows: pd.DataFrame,
@@ -125,36 +195,18 @@ def run_tifex(
     signal_cols: List[str],
     feature_set: str = "stat",
     safe: bool = True,
+    mode: str = "safe",            # "safe" or "top"
+    filter_top_output: bool = True, # keep only TOP_FEATURE_COLUMNS when mode="top" & feature_set="stat"
     njobs: int = 1,
     quiet: bool = True,
 ) -> pd.DataFrame:
     """
-    Run TIFEX feature extraction on pre-windowed signals.
+    Run TIFEX feature extraction on pre-windowed signals (windows defined by start_idx/end_idx).
 
-    Parameters
-    ----------
-    data : pd.DataFrame
-        Preprocessed signal data (indexed or row-based).
-    windows : pd.DataFrame
-        Window definitions with start_idx, end_idx.
-    fs : int
-        Sampling frequency in Hz.
-    signal_cols : list[str]
-        Signal columns to extract features from.
-    feature_set : {"stat", "spec", "tf", "all"}
-    safe : bool
-        Use conservative calculator subsets.
-    njobs : int
-        Parallel jobs for TIFEX.
-    quiet : bool
-        Suppress warnings.
-
-    Returns
-    -------
-    pd.DataFrame
-        One row per window, flattened feature columns.
+    mode:
+      - "safe": use conservative subsets (generic)
+      - "top":  compute only stat calculators needed for TOP_FEATURE_COLUMNS
     """
-
     fs = int(round(fs))
 
     if quiet:
@@ -163,29 +215,33 @@ def run_tifex(
     for c in ["start_idx", "end_idx"]:
         if c not in windows.columns:
             raise ValueError(f"Windows DataFrame missing '{c}'.")
-        
+
     missing = [c for c in signal_cols if c not in data.columns]
     if missing:
         raise ValueError(f"Missing signal columns: {missing}")
 
     # Feature params
     if safe:
-        stat_params = choose_safe_stat_calculators(fs)
+        if mode == "top":
+            stat_params = choose_top_stat_calculators(fs)
+        else:
+            stat_params = choose_safe_stat_calculators(fs)
+
         spec_params = choose_safe_spectral_calculators(fs)
-        tf_params = choose_safe_timefreq_calculators(fs)
+        tf_params = choose_safe_timefreq_calculators(fs, stat_params=stat_params)
     else:
         stat_params = settings.StatisticalFeatureParams(fs)
         spec_params = settings.SpectralFeatureParams(fs)
         tf_params = settings.TimeFrequencyFeatureParams(fs)
 
     rows: List[Dict[str, float]] = []
-    
+
     for i, w in windows.iterrows():
         start = int(w.start_idx)
         end = int(w.end_idx)
         segment = data.iloc[start:end][signal_cols]
 
-        out = {
+        out: Dict[str, object] = {
             "window_id": i,
             "start_idx": start,
             "end_idx": end,
@@ -199,13 +255,10 @@ def run_tifex(
 
         # Guard against empty windows
         if len(segment) == 0:
-            # fill nothing else; keep row so alignment stays correct
             out["valid"] = False
             rows.append(out)
             continue
 
-        # Compute features
-        # TIFEX expects DataFrame with columns specified; output is indexed by column names
         try:
             if feature_set == "stat":
                 feats = extraction.calculate_statistical_features(segment, stat_params, columns=signal_cols, njobs=njobs)
@@ -223,39 +276,46 @@ def run_tifex(
             if feats.empty:
                 out["valid"] = False
             else:
-                out.update(flatten_axis_feature_df(feats))
+                flat = flatten_axis_feature_df(feats)
+                if mode == "top" and filter_top_output and feature_set == "stat":
+                    # Keep EXACT columns listed in TOP_FEATURE_COLUMNS (plus metadata already in out)
+                    flat = {k: v for k, v in flat.items() if k in TOP_FEATURE_SET}
+                out.update(flat)
 
         except Exception as e:
-            # If something unexpected blows up (not just TIFEX internal NaNs),
-            # keep the window metadata and record the error string.
             out["valid"] = False
             out["error"] = str(e)
 
         rows.append(out)
-        
-        # light progress
+
         if (i + 1) % 200 == 0:
             print(f"[tifex_from_windows] processed {i+1}/{len(windows)} windows", file=sys.stderr)
 
-    feats_df = pd.DataFrame(rows)
+    return pd.DataFrame(rows)
 
-    return feats_df
-    
-# ---- CLI ----
+
+# ----------------------------
+# CLI
+# ----------------------------
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Run TIFEX on pre-windowed signals.")
-    ap.add_argument("--input", required=True, help="Preprocessed CSV with t_sec and signal columns")
+    ap.add_argument("--input", required=True, help="Preprocessed CSV with signal columns")
     ap.add_argument("--windows", required=True, help="Window CSV with start_idx, end_idx")
     ap.add_argument("--out", required=True, help="Output feature CSV")
     ap.add_argument("--fs", required=True, type=float, help="Sampling frequency (Hz)")
     ap.add_argument("--signals", required=True, help="Comma-separated list of signal columns")
     ap.add_argument("--features", choices=["stat", "spec", "tf", "all"], default="stat")
     ap.add_argument("--safe", action="store_true", help="Use conservative feature subsets")
+    ap.add_argument("--mode", choices=["safe", "top"], default="safe", help="safe=generic conservative, top=only TOP_FEATURE_COLUMNS (stat)")
+    ap.add_argument("--no-filter-top-output", action="store_true", help="When mode=top, do NOT filter output columns to TOP_FEATURE_COLUMNS")
     ap.add_argument("--njobs", type=int, default=1)
     ap.add_argument("--quiet", action="store_true")
     return ap.parse_args()
 
-# ---- Main ----
+
+# ----------------------------
+# Main
+# ----------------------------
 def main() -> None:
     args = parse_args()
 
@@ -270,6 +330,8 @@ def main() -> None:
         signal_cols=signal_cols,
         feature_set=args.features,
         safe=args.safe,
+        mode=args.mode,
+        filter_top_output=(not args.no_filter_top_output),
         njobs=args.njobs,
         quiet=args.quiet,
     )
@@ -283,5 +345,7 @@ def main() -> None:
     print(f"Wrote features for {len(feat_df)} windows to {args.out}")
     print("Example:")
     print(feat_df.head(3).to_string(index=False))
-    
-if __name__ == "__main__": main()
+
+
+if __name__ == "__main__":
+    main()

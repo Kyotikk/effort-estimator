@@ -53,7 +53,7 @@ from sklearn.preprocessing import StandardScaler
 # -----------------------------
 # CONFIG (edit only here)
 # -----------------------------
-IN_CSV = "/Users/pascalschlegel/data/interim/features_10.csv"
+IN_CSV = "/Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3/IMU/features_2.0s.csv"
 OUT_DIR = "/Users/pascalschlegel/effort-estimator/data/feature_extraction/analysis/quality_features_10"
 
 # Non-feature columns (metadata) that may appear in CSV

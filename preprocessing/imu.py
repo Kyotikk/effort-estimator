@@ -1,107 +1,120 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 from scipy.signal import butter, filtfilt
 
-# Helpers
-# ----- Butterworth filter functions -----
-def butter_lowpass(data: np.ndarray, cutoff: float, fs: float, order: int=4) -> np.ndarray:
+
+# -------------------------
+# Filters
+# -------------------------
+def butter_lowpass(data: np.ndarray, cutoff: float, fs: float, order: int = 4) -> np.ndarray:
     nyq = 0.5 * fs
     b, a = butter(order, cutoff / nyq, btype="low")
     return filtfilt(b, a, data)
 
 
-def butter_bandpass(data: np.ndarray, lowcut: float, highcut: float, fs: float, order: int=4) ->np.ndarray:
+def butter_bandpass(data: np.ndarray, lowcut: float, highcut: float, fs: float, order: int = 4) -> np.ndarray:
     nyq = 0.5 * fs
     b, a = butter(order, [lowcut / nyq, highcut / nyq], btype="band")
     return filtfilt(b, a, data)
 
 
-# ----- Load IMU data -----
+# -------------------------
+# Load
+# -------------------------
 def load_imu_csv(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path, compression="gzip")
-    
+    """
+    Expects raw IMU csv(.gz) with columns:
+      time (unix seconds), accX, accY, accZ
+
+    Returns:
+      t_unix (epoch seconds), t_sec (relative), acc_x/y/z
+    """
+    df = pd.read_csv(path, compression="gzip" if path.endswith(".gz") else None)
+
     required = ["time", "accX", "accY", "accZ"]
     missing = [c for c in required if c not in df.columns]
     if missing:
-        raise ValueError(f"Missing columns {missing} in {path}")
-    
+        raise ValueError(f"Missing columns {missing} in {path}. Found: {list(df.columns)[:40]}")
+
     df = df[required].copy()
-    df = df.rename(
-        columns={
-            "time": "t_sec",
-            "accX": "acc_x",
-            "accY": "acc_y",
-            "accZ": "acc_z",
-        }
-    )
 
-    df[["t_sec", "acc_x", "acc_y", "acc_z"]] = df[
-        ["t_sec", "acc_x", "acc_y", "acc_z"]
-    ].apply(pd.to_numeric, errors="coerce")
+    df["t_unix"] = pd.to_numeric(df["time"], errors="coerce").astype(float)
+    df["acc_x"] = pd.to_numeric(df["accX"], errors="coerce").astype(float)
+    df["acc_y"] = pd.to_numeric(df["accY"], errors="coerce").astype(float)
+    df["acc_z"] = pd.to_numeric(df["accZ"], errors="coerce").astype(float)
 
-    df = df.dropna().sort_values("t_sec").reset_index(drop=True)
+    df = df.dropna(subset=["t_unix", "acc_x", "acc_y", "acc_z"]).sort_values("t_unix").reset_index(drop=True)
 
-    return df
+    t0 = float(df["t_unix"].iloc[0])
+    df["t_sec"] = df["t_unix"] - t0
 
-# ----- Optional resampling -----
+    return df[["t_unix", "t_sec", "acc_x", "acc_y", "acc_z"]]
+
+
+# -------------------------
+# Resample
+# -------------------------
 def resample_imu(df: pd.DataFrame, fs_out: float) -> pd.DataFrame:
-    t = df["t_sec"].values
+    """
+    Uniform grid in t_sec, interpolate acc axes AND t_unix.
+    """
+    t_sec = df["t_sec"].to_numpy(dtype=float)
+    t_unix = df["t_unix"].to_numpy(dtype=float)
 
-    t_new = np.arange(t[0], t[-1], 1.0 / fs_out)
+    if len(t_sec) < 2:
+        raise ValueError("Too few IMU samples for resampling.")
 
-    out = {"t_sec": t_new}
+    dt = 1.0 / float(fs_out)
+    t_sec_new = np.arange(t_sec[0], t_sec[-1] + 1e-9, dt)
+
+    out = {
+        "t_sec": t_sec_new,
+        "t_unix": np.interp(t_sec_new, t_sec, t_unix),
+    }
 
     for axis in ["acc_x", "acc_y", "acc_z"]:
-        out[axis] = np.interp(t_new, t, df[axis].values)
+        out[axis] = np.interp(t_sec_new, t_sec, df[axis].to_numpy(dtype=float))
 
     return pd.DataFrame(out)
 
-# ===== Filtering =====
-# ----- Noise filtering at 5Hz -----
+
+# -------------------------
+# Filtering
+# -------------------------
 def lowpass_filter_imu(df: pd.DataFrame, fs: float, cutoff: float) -> pd.DataFrame:
     out = df.copy()
     for axis in ["acc_x", "acc_y", "acc_z"]:
-        out[axis] = butter_lowpass(out[axis].values, cutoff, fs)
-
+        out[axis] = butter_lowpass(out[axis].to_numpy(dtype=float), cutoff, fs)
     return out
 
-# ----- Gravity estimation and removal -----
-def add_gravity_and_dynamic(
-    df: pd.DataFrame,
-    fs: float,
-    gravity_cutoff: float
-) -> pd.DataFrame:
+
+def add_gravity_and_dynamic(df: pd.DataFrame, fs: float, gravity_cutoff: float) -> pd.DataFrame:
     out = df.copy()
-
     for axis in ["acc_x", "acc_y", "acc_z"]:
-        grav = butter_lowpass(df[axis].values, gravity_cutoff, fs)
+        grav = butter_lowpass(df[axis].to_numpy(dtype=float), gravity_cutoff, fs)
         out[f"{axis}_grav"] = grav
-        out[f"{axis}_dyn"] = df[axis].values - grav
-
+        out[f"{axis}_dyn"] = df[axis].to_numpy(dtype=float) - grav
     return out
 
-# ----- Full preprocessing pipeline -----
-# path = "C:\\Users\\Nicla\\Documents\\ETHZ\\Lifelogging\\Data\\interim\\scai-ncgg\\parsingsim3\\sim_healthy_3\\corsano_bioz_acc\\2025-12-04.csv.gz"
-def preprocess_imu(path: str, fs_out: int, noise_cutoff: float = 5.0, gravity_cutoff: float = 0.3) -> pd.DataFrame:
-    """
-    Returns a numeric dataframe with:
-    - t_sec
-    - acc_x, acc_y, acc_z
-    - acc_x_dyn, acc_y_dyn, acc_z_dyn
-    - acc_x_grav, acc_y_grav, acc_z_grav
-    """
 
-    # Load
+# -------------------------
+# Main callable
+# -------------------------
+def preprocess_imu(
+    path: str,
+    fs_out: float,
+    noise_cutoff: float = 5.0,
+    gravity_cutoff: float = 0.3,
+) -> pd.DataFrame:
+    """
+    Returns:
+      t_unix, t_sec,
+      acc_x/y/z,
+      acc_x/y/z_grav,
+      acc_x/y/z_dyn
+    """
     df = load_imu_csv(path)
-
-    # Resample
     df = resample_imu(df, fs_out)
-
-    # Activity low-pass
     df = lowpass_filter_imu(df, fs_out, noise_cutoff)
-
-    # Gravity + dynamic
     df = add_gravity_and_dynamic(df, fs_out, gravity_cutoff)
-
     return df
-

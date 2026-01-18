@@ -1,0 +1,7 @@
+feature,reason,value
+eda_phasic_iqr,variance<=1e-08,3.3579767099302274e-09
+eda_phasic_mad,variance<=1e-08,1.0935996780139832e-09
+eda_phasic_mean_abs_diff,variance<=1e-08,4.4038044184479333e-10
+eda_phasic_slope,variance<=1e-08,1.929575458156868e-10
+eda_phasic_median,variance<=1e-08,2.6462629791323005e-12
+eda_ok,variance<=1e-08,0.0
