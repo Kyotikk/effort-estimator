@@ -106,10 +106,10 @@ def run_pipeline(config_path: str) -> None:
             
             if not windows_path.exists():
                 windows_df = create_windows(
+                    df=imu_df,
                     fs=fs_imu,
                     win_sec=window_length_sec,
                     overlap=overlap,
-                    data_length_sec=len(imu_df) / fs_imu,
                 )
                 windows_df.to_csv(windows_path, index=False)
             else:
@@ -129,10 +129,10 @@ def run_pipeline(config_path: str) -> None:
                 
                 if not windows_path_sec.exists():
                     windows_df_sec = create_windows(
+                        df=imu_df,
                         fs=fs_imu,
                         win_sec=win_sec,
                         overlap=overlap,
-                        data_length_sec=len(imu_df) / fs_imu,
                     )
                     windows_df_sec.to_csv(windows_path_sec, index=False)
                 else:
