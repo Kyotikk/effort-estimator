@@ -27,6 +27,16 @@ def find_file(subject_path, pattern_parts):
         if not matches:
             return None
         base = matches[0]
+    
+    # If we end up with a directory, find the .csv.gz or .csv file inside
+    if base.is_dir():
+        csv_files = list(base.glob("*.csv.gz")) + list(base.glob("*.csv"))
+        if not csv_files:
+            return None
+        # Return the most recent file (not 1970-01-01.csv.gz which is a placeholder)
+        csv_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        return str(csv_files[0])
+    
     return str(base)
 
 
