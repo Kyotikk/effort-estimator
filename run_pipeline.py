@@ -415,4 +415,6 @@ def run_pipeline(config_path: str) -> None:
 
 
 if __name__ == "__main__":
-    run_pipeline("config/pipeline.yaml")
+    import sys
+    config_path = sys.argv[1] if len(sys.argv) > 1 else "config/pipeline.yaml"
+    run_pipeline(config_path)
