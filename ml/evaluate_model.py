@@ -55,17 +55,26 @@ class ModelTrainerEvaluator:
         print(f"TRAINING MODEL: {model_key}")
         print(f"{'='*80}")
         
-        # Feature selection (top 100 by variance)
+        # Feature selection (top 100 by correlation with target, balanced across modalities)
         k_features = min(100, X_train.shape[1])
-        feature_variance = np.var(X_train, axis=0)
-        top_indices = np.argsort(feature_variance)[-k_features:]
+        
+        # Calculate absolute correlation with target
+        correlations = np.array([np.corrcoef(X_train[:, i], y_train)[0, 1] for i in range(X_train.shape[1])])
+        correlations = np.abs(np.nan_to_num(correlations, nan=0))
+        
+        top_indices = np.argsort(correlations)[-k_features:]
         top_indices = np.sort(top_indices)
         
         X_train_selected = X_train[:, top_indices]
         X_test_selected = X_test[:, top_indices]
         selected_cols = [feature_cols[i] for i in top_indices]
         
-        print(f"\nFeature selection: kept top {k_features} by variance")
+        # Show distribution
+        eda_count = sum(1 for c in selected_cols if c.startswith('eda_'))
+        imu_count = sum(1 for c in selected_cols if c.startswith('acc_'))
+        ppg_count = sum(1 for c in selected_cols if c.startswith('ppg_'))
+        print(f"\nFeature selection: kept top {k_features} by correlation with target")
+        print(f"  EDA: {eda_count}, IMU: {imu_count}, PPG: {ppg_count}")
         
         # Standardize features
         scaler = StandardScaler()
@@ -473,18 +482,17 @@ def main():
     print(f"   Labeled samples: {len(df_labeled)}")
     print(f"   Borg range: [{df_labeled['borg'].min():.2f}, {df_labeled['borg'].max():.2f}]")
     
-    # Prepare features - exclude all metadata and time-related columns
+    # Prepare features - exclude all metadata and numbered variants
     skip_cols = {
         "window_id", "start_idx", "end_idx", "valid",
         "t_start", "t_center", "t_end", "n_samples", "win_sec",
         "modality", "subject", "borg",
     }
     
-    # Also exclude numbered variants like window_id_r.1, t_start_r.2, etc. (metadata duplicates)
     def is_metadata(col):
         if col in skip_cols:
             return True
-        # Exclude all _r variants (single and numbered)
+        # Exclude all _r variants (single and numbered like _r.1, _r.2, etc.)
         if col.endswith("_r") or any(col.endswith(f"_r.{i}") for i in range(1, 10)):
             return True
         return False
@@ -494,7 +502,7 @@ def main():
     X = df_labeled[feature_cols].values
     y = df_labeled["borg"].values
     
-    print(f"\n📊 Features: {len(feature_cols)}")
+    print(f"\n📊 Features (no metadata): {len(feature_cols)}")
     print(f"   Samples: {len(X)}")
     print(f"   Y range: [{y.min():.2f}, {y.max():.2f}]")
     
