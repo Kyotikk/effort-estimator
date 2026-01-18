@@ -164,17 +164,22 @@ def parse_adl_intervals(adl_csv: Path) -> pd.DataFrame:
         return out
 
     # ---------- CASE B: legacy >=3-column format ----------
-    if df.shape[1] < 3:
+    # If we get here, try to handle as generic format
+    # Accept 2+ columns: try to infer which are time, event, borg
+    if df.shape[1] < 2:
         raise ValueError(
-            f"ADL file has {df.shape[1]} columns but must have "
-            "either (time, ADLs) or (timestamp, event, borg)."
+            f"ADL file has {df.shape[1]} columns but must have at least 2. "
+            "Expected: (time, ADLs) or (timestamp, event, borg)."
         )
 
-    df = df.rename(columns={
+    rename_map = {
         df.columns[0]: "timestamp",
         df.columns[1]: "event",
-        df.columns[2]: "borg",
-    })
+    }
+    if df.shape[1] >= 3:
+        rename_map[df.columns[2]] = "borg"
+    
+    df = df.rename(columns=rename_map)
 
     parts = df["timestamp"].astype(str).str.extract(
         r'(\d{2}-\d{2}-\d{4}-\d{2}-\d{2}-\d{2})-(\d{1,6})'
