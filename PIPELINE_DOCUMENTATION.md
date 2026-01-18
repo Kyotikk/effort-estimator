@@ -4,7 +4,7 @@
 
 This pipeline processes raw sensor data from multiple wearable devices to estimate physical effort (Borg scale 0-10) for three different populations: elderly, healthy, and severe conditions. The pipeline spans from raw signal preprocessing through condition-specific effort prediction.
 
-**Key Innovation:** Two-stage system that first classifies the subject's condition, then uses condition-specific models for highly accurate effort estimation.
+**Key Architecture:** Three separate effort estimation models (one per condition) trained independently for maximum accuracy on each population's unique effort range.
 
 ---
 
@@ -606,29 +606,27 @@ EDA window: t_center=103.2s (>2s) → skip ✗
 │ Output: 3,810 total samples (1,188 labeled)                 │
 └─────────────┬───────────────────────────────────────────────┘
               │
-              ├─────────────────────────────────┐
-              │                                 │
-              ▼                                 ▼
-    ┌──────────────────────┐      ┌──────────────────────┐
-    │ CONDITION CLASSIFIER │      │ CONDITION-SPECIFIC   │
-    │ (XGBoost)            │      │ EFFORT MODELS        │
-    │ 95%+ accuracy        │      │ (3 separate models)  │
-    │                      │      │ Accuracy: 0.41-0.99  │
-    │ Predicts:            │      │                      │
-    │ - elderly3           │      │ elderly3: R²=0.926   │
-    │ - healthy3           │      │ healthy3: R²=0.413   │
-    │ - severe3            │      │ severe3: R²=0.997    │
-    └──────────────────────┘      └──────────────────────┘
-              │                                 │
-              └─────────────────────┬───────────┘
-                                    │
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │ TWO-STAGE INFERENCE           │
-                    │ 1. Classify condition         │
-                    │ 2. Estimate effort (0-10)     │
-                    │ Output: Borg effort score     │
-                    └───────────────────────────────┘
+              │
+              ▼
+    ┌──────────────────────────────────────────┐
+    │ CONDITION-SPECIFIC EFFORT MODELS         │
+    │ (3 separate XGBoost regressors)          │
+    │                                          │
+    │ elderly3:  R²=0.926, MAE=0.053          │
+    │ healthy3:  R²=0.405, MAE=0.015          │
+    │ severe3:   R²=0.997, MAE=0.026          │
+    │                                          │
+    │ Each optimized for its own               │
+    │ effort range and population              │
+    └──────────────────────────────────────────┘
+              │
+              ▼
+    ┌──────────────────────────────────────────┐
+    │ INFERENCE                                │
+    │ Input: Features + Known Condition        │
+    │ (condition from metadata/database)       │
+    │ Output: Borg effort score (0-10)         │
+    └──────────────────────────────────────────┘
 ```
 
 ---
@@ -681,10 +679,8 @@ fusion:
 | `features/*.py` | Feature extraction per modality |
 | `windowing/windows.py` | Create time windows |
 | `ml/targets/adl_alignment.py` | Parse ADL & align labels |
-| `train_condition_specific_xgboost.py` | Train 3 effort models |
-| `train_condition_classifier.py` | Train condition classifier (to create) |
+| `train_condition_specific_xgboost.py` | Train 3 effort models ✅ |
 | `analyze_condition_models.py` | Performance analysis by effort |
-| `inference_system.py` | Two-stage prediction (to create) |
 | `feature_quality_check.py` | Feature analysis & validation |
 | `feature_sanity_plots.py` | Visualizations |
 
@@ -718,11 +714,12 @@ Use **severe3 model** for production (highest R², most robust). Fallback to eld
 
 ## Future Improvements
 
-1. Train condition classifier to eliminate manual specification
+1. Add automatic condition classification (optional enhancement)
 2. Develop transfer learning between conditions
 3. Add real-time streaming preprocessing
 4. Ensemble methods combining all 3 models
 5. Effort confidence intervals (uncertainty quantification)
 6. Cross-validation across time (temporal CV)
 7. Domain adaptation for new wearables
+8. Web API for inference service
 
