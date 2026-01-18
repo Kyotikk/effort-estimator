@@ -14,7 +14,8 @@ def _read_adl_any_sep(adl_csv: Path) -> tuple:
     # Try to extract metadata from first 3 lines
     metadata = {}
     try:
-        with open(adl_csv, 'r') as f:
+        import gzip
+        with gzip.open(adl_csv, 'rt') if str(adl_csv).endswith('.gz') else open(adl_csv, 'r') as f:
             lines = [f.readline() for _ in range(3)]
             for line in lines[:2]:  # Check first 2 lines
                 if "Start of Recording:" in line:

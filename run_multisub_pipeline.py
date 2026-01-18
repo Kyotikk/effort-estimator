@@ -28,14 +28,20 @@ def find_file(subject_path, pattern_parts):
             return None
         base = matches[0]
     
-    # If we end up with a directory, find the .csv.gz or .csv file inside
+    # If we end up with a directory, find the .csv or .csv.gz file inside
+    # Prefer uncompressed .csv over .csv.gz
     if base.is_dir():
-        csv_files = list(base.glob("*.csv.gz")) + list(base.glob("*.csv"))
-        if not csv_files:
-            return None
-        # Return the most recent file (not 1970-01-01.csv.gz which is a placeholder)
-        csv_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-        return str(csv_files[0])
+        csv_files = list(base.glob("*.csv"))
+        if csv_files:
+            # Return the most recent uncompressed file
+            csv_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            return str(csv_files[0])
+        # Fall back to .csv.gz if no uncompressed files
+        csv_gz_files = list(base.glob("*.csv.gz"))
+        if csv_gz_files:
+            csv_gz_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            return str(csv_gz_files[0])
+        return None
     
     return str(base)
 
