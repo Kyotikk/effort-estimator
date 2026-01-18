@@ -11,6 +11,10 @@ datasets:
       path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/corsano_bioz_acc/2025-12-04.csv.gz
       fs_out: 32
 
+    imu_wrist:
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/corsano_wrist_acc/2025-12-04.csv.gz
+      fs_out: 32
+
     ppg_green:
       path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/corsano_wrist_ppg2_green_6/2025-12-04.csv.gz
       fs_out: 32
@@ -36,6 +40,16 @@ preprocessing:
     noise_cutoff: 5.0
     gravity_cutoff: 0.3
     # only used if your imu preprocessing supports it
+    normalise: false
+
+  imu_bioz:
+    noise_cutoff: 5.0
+    gravity_cutoff: 0.3
+    normalise: false
+
+  imu_wrist:
+    noise_cutoff: 5.0
+    gravity_cutoff: 0.3
     normalise: false
 
   ppg_green:
@@ -78,6 +92,20 @@ windowing:
 
 features:
   imu:
+    modality: imu
+    signals: [acc_x_dyn, acc_y_dyn, acc_z_dyn]
+    feature_set: stat
+    safe: true
+    njobs: 1
+
+  imu_bioz:
+    modality: imu
+    signals: [acc_x_dyn, acc_y_dyn, acc_z_dyn]
+    feature_set: stat
+    safe: true
+    njobs: 1
+
+  imu_wrist:
     modality: imu
     signals: [acc_x_dyn, acc_y_dyn, acc_z_dyn]
     feature_set: stat
@@ -134,7 +162,8 @@ fusion:
   # IMPORTANT: point these to the FEATURE tables you actually want to fuse
   # (if you fuse *_features_*.csv, set them accordingly)
   modalities:
-    imu: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3/imu_bioz/imu_features_{window_length}.csv
+    imu_bioz: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3/imu_bioz/imu_features_{window_length}.csv
+    imu_wrist: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3/imu_wrist/imu_features_{window_length}.csv
     ppg_green: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3/ppg_green/ppg_green_features_{window_length}.csv
     ppg_infra: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3/ppg_infra/ppg_infra_features_{window_length}.csv
     ppg_red: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3/ppg_red/ppg_red_features_{window_length}.csv

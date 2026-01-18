@@ -63,30 +63,89 @@ def run_pipeline(config_path: str) -> None:
         ds_out = output_root / name
         ds_out.mkdir(parents=True, exist_ok=True)
 
-        # ---------- MODALITY: IMU ----------
-        print("▶ IMU: preprocessing")
-        imu_cfg = cfg["preprocessing"]["imu"]
-        feat_cfg_imu = cfg["features"]["imu"]
+        # ---------- MODALITY: IMU (multiple types: bioz, wrist) ----------
+        imu_types = ["imu_bioz", "imu_wrist"]
+        
+        for imu_type in imu_types:
+            if imu_type not in dataset:
+                print(f"⚠ Skipping {imu_type}: not in dataset")
+                continue
+                
+            if imu_type not in cfg["preprocessing"] or imu_type not in cfg["features"]:
+                print(f"⚠ Skipping {imu_type}: missing config")
+                continue
+                
+            print(f"▶ {imu_type}: preprocessing")
+            imu_cfg = cfg["preprocessing"][imu_type]
+            feat_cfg_imu = cfg["features"][imu_type]
 
-        imu_path = dataset["imu_bioz"]["path"]
-        fs_imu = float(dataset["imu_bioz"]["fs_out"])
+            imu_path = dataset[imu_type]["path"]
+            fs_imu = float(dataset[imu_type]["fs_out"])
 
-        imu_out_dir = ds_out / "imu_bioz"
-        imu_out_dir.mkdir(parents=True, exist_ok=True)
+            imu_out_dir = ds_out / imu_type
+            imu_out_dir.mkdir(parents=True, exist_ok=True)
 
-        imu_clean_path = imu_out_dir / "imu_preprocessed.csv"
-        if imu_clean_path.exists():
-            imu_df = pd.read_csv(imu_clean_path)
-            print(f"  Loaded {imu_clean_path}")
-        else:
-            imu_df = preprocess_imu(
-                path=imu_path,
-                fs_out=fs_imu,
-                noise_cutoff=imu_cfg["noise_cutoff"],
-                gravity_cutoff=imu_cfg["gravity_cutoff"],
-            )
-            imu_df.to_csv(imu_clean_path, index=False)
-            print(f"  Saved {imu_clean_path}")
+            imu_clean_path = imu_out_dir / "imu_preprocessed.csv"
+            if imu_clean_path.exists():
+                imu_df = pd.read_csv(imu_clean_path)
+                print(f"  Loaded {imu_clean_path}")
+            else:
+                imu_df = preprocess_imu(
+                    path=imu_path,
+                    fs_out=fs_imu,
+                    noise_cutoff=imu_cfg["noise_cutoff"],
+                    gravity_cutoff=imu_cfg["gravity_cutoff"],
+                )
+                imu_df.to_csv(imu_clean_path, index=False)
+                print(f"  Saved {imu_clean_path}")
+
+            # Windowing
+            print(f"  Windowing {imu_type}...")
+            window_length_sec = float(win_lengths[0])
+            windows_path = imu_out_dir / f"imu_windows_{window_length_sec:.1f}s.csv"
+            
+            if not windows_path.exists():
+                windows_df = create_windows(
+                    fs=fs_imu,
+                    win_sec=window_length_sec,
+                    overlap=overlap,
+                    data_length_sec=len(imu_df) / fs_imu,
+                )
+                windows_df.to_csv(windows_path, index=False)
+            else:
+                windows_df = pd.read_csv(windows_path)
+            
+            n_windows = len(windows_df)
+            print(f"    ✓ Created {n_windows} windows ({window_length_sec:.1f}s)")
+
+            # Feature extraction
+            print(f"  Extracting features for {imu_type}...")
+            signal_cols = feat_cfg_imu["signals"]
+            
+            for win_sec in win_lengths:
+                win_sec = float(win_sec)
+                windows_path_sec = imu_out_dir / f"imu_windows_{win_sec:.1f}s.csv"
+                features_path = imu_out_dir / f"imu_features_{win_sec:.1f}s.csv"
+                
+                if not windows_path_sec.exists():
+                    windows_df_sec = create_windows(
+                        fs=fs_imu,
+                        win_sec=win_sec,
+                        overlap=overlap,
+                        data_length_sec=len(imu_df) / fs_imu,
+                    )
+                    windows_df_sec.to_csv(windows_path_sec, index=False)
+                else:
+                    windows_df_sec = pd.read_csv(windows_path_sec)
+                
+                if not features_path.exists():
+                    feat_df = compute_top_imu_features_from_windows(
+                        data=imu_df,
+                        windows=windows_df_sec,
+                        signal_cols=signal_cols,
+                    )
+                    feat_df.to_csv(features_path, index=False)
+                    print(f"    ✓ Features {win_sec:.1f}s: {len(feat_df)} windows, {len(feat_df.columns)-1} features")
 
         # ---------- MODALITY: PPG variants (ppg_green, ppg_infra, ppg_red) ----------
         ppg_variants = {k: v for k, v in dataset.items() if k.startswith("ppg_")}
