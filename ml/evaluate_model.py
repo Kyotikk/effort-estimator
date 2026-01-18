@@ -473,16 +473,23 @@ def main():
     print(f"   Labeled samples: {len(df_labeled)}")
     print(f"   Borg range: [{df_labeled['borg'].min():.2f}, {df_labeled['borg'].max():.2f}]")
     
-    # Prepare features
+    # Prepare features - exclude all metadata and time-related columns
     skip_cols = {
         "window_id", "start_idx", "end_idx", "valid",
         "t_start", "t_center", "t_end", "n_samples", "win_sec",
         "modality", "subject", "borg",
     }
-    feature_cols = [
-        col for col in df_labeled.columns
-        if col not in skip_cols and not col.endswith("_r")
-    ]
+    
+    # Also exclude numbered variants like window_id_r.1, t_start_r.2, etc. (metadata duplicates)
+    def is_metadata(col):
+        if col in skip_cols:
+            return True
+        # Exclude all _r variants (single and numbered)
+        if col.endswith("_r") or any(col.endswith(f"_r.{i}") for i in range(1, 10)):
+            return True
+        return False
+    
+    feature_cols = [col for col in df_labeled.columns if not is_metadata(col)]
     
     X = df_labeled[feature_cols].values
     y = df_labeled["borg"].values
