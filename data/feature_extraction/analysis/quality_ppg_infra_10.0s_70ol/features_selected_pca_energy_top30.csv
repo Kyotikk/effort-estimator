@@ -6,7 +6,7 @@ ppg_infra_tke_std
 ppg_infra_dx_kurtosis
 ppg_infra_max
 ppg_infra_min
-ppg_infra_tke_mean
+ppg_infra_tke_mean_abs
 ppg_infra_signal_energy
 ppg_infra_p5
 ppg_infra_skew
@@ -21,4 +21,4 @@ ppg_infra_mean
 ppg_infra_clearance_factor
 ppg_infra_shape_factor
 ppg_infra_kurtosis
-ppg_infra_diff_mean
+ppg_infra_dx_mean

@@ -5,7 +5,7 @@ PC1,ppg_infra_p5,0.33000602796683004
 PC1,ppg_infra_diff_mean_abs,0.32767454406535923
 PC1,ppg_infra_p90,0.3218455484794187
 PC1,ppg_infra_signal_energy,0.31942244428479694
-PC1,ppg_infra_tke_mean,0.3141311421349501
+PC1,ppg_infra_tke_mean_abs,0.3141311421349501
 PC1,ppg_infra_iqr,0.30445160553716133
 PC2,ppg_infra_impulse_factor,0.420661910133956
 PC2,ppg_infra_kurtosis,0.40125934119293394
@@ -21,11 +21,11 @@ PC3,ppg_infra_median,0.45640155350502976
 PC3,ppg_infra_ddx_mean,0.31998495928611365
 PC3,ppg_infra_tke_std,0.08158820059063789
 PC3,ppg_infra_skew,0.07626775215548977
-PC3,ppg_infra_tke_mean,0.06209261981711491
+PC3,ppg_infra_tke_mean_abs,0.06209261981711491
 PC3,ppg_infra_dx_kurtosis,0.060169548090987526
 PC4,ppg_infra_zcr,0.6779928332570317
 PC4,ppg_infra_mean_cross_rate,0.6736889506580312
-PC4,ppg_infra_tke_mean,0.11717338930694345
+PC4,ppg_infra_tke_mean_abs,0.11717338930694345
 PC4,ppg_infra_crest_factor,0.11116047073663034
 PC4,ppg_infra_diff_mean_abs,0.10942373548857791
 PC4,ppg_infra_skew,0.09831200004040501
@@ -62,4 +62,4 @@ PC8,ppg_infra_mean,0.23037073426271118
 PC8,ppg_infra_tke_std,0.20067983128727415
 PC8,ppg_infra_trim_mean_10,0.15347623173125358
 PC8,ppg_infra_iqr,0.11818074252850512
-PC8,ppg_infra_tke_mean,0.1009718134308776
+PC8,ppg_infra_tke_mean_abs,0.1009718134308776

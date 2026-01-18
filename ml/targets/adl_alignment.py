@@ -26,7 +26,8 @@ def _read_adl_any_sep(adl_csv: Path) -> tuple:
     candidates = []
     for sep in [",", ";", "\t", "|"]:
         try:
-            df = pd.read_csv(adl_csv, sep=sep, compression="infer", skiprows=2)
+            # Read with dtype=str to preserve empty values as empty strings, not NaN
+            df = pd.read_csv(adl_csv, sep=sep, compression="infer", skiprows=2, dtype=str)
             candidates.append((df.shape[1], sep, df))
         except Exception:
             pass

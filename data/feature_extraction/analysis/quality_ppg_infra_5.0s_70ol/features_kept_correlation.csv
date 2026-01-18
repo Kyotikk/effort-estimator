@@ -16,8 +16,8 @@ ppg_infra_shape_factor
 ppg_infra_impulse_factor
 ppg_infra_clearance_factor
 ppg_infra_mean_cross_rate
-ppg_infra_tke_mean
 ppg_infra_tke_std
+ppg_infra_tke_mean_abs
 ppg_infra_dx_mean
 ppg_infra_ddx_mean
 ppg_infra_dx_kurtosis

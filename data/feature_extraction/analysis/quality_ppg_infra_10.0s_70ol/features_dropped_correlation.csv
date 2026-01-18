@@ -1,8 +1,8 @@
 feature,reason,value
-ppg_infra_tke_mean_abs,|corr|>=0.95,1.0
+ppg_infra_tke_mean,|corr|>=0.95,1.0
 ppg_infra_signal_rms,|corr|>=0.95,1.0
+ppg_infra_diff_mean,|corr|>=0.95,1.0
 ppg_infra_diff_std,|corr|>=0.95,1.0
-ppg_infra_dx_mean,|corr|>=0.95,1.0
 ppg_infra_diff_rms,|corr|>=0.95,0.9999998390962499
 ppg_infra_std,|corr|>=0.95,0.999999172694971
 ppg_infra_mad,|corr|>=0.95,0.9983308998757064

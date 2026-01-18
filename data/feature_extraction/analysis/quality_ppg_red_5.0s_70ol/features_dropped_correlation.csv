@@ -1,14 +1,14 @@
 feature,reason,value
-ppg_red_signal_rms,|corr|>=0.95,1.0
+ppg_red_dx_mean,|corr|>=0.95,1.0
+ppg_red_rms,|corr|>=0.95,1.0
 ppg_red_tke_mean_abs,|corr|>=0.95,1.0
 ppg_red_dx_std,|corr|>=0.95,1.0
-ppg_red_dx_mean,|corr|>=0.95,1.0
 ppg_red_diff_rms,|corr|>=0.95,0.9999991508402551
 ppg_red_std,|corr|>=0.95,0.9999912443723684
 ppg_red_mad,|corr|>=0.95,0.9965725848265038
 ppg_red_range,|corr|>=0.95,0.9953712317873064
 ppg_red_mean_abs,|corr|>=0.95,0.9930251289394143
-ppg_red_rms,|corr|>=0.95,0.992368641955743
+ppg_red_signal_rms,|corr|>=0.95,0.992368641955743
 ppg_red_p1,|corr|>=0.95,0.9922985327596758
 ppg_red_p99,|corr|>=0.95,0.9895341264517051
 ppg_red_p90_p10,|corr|>=0.95,0.9881675378333533

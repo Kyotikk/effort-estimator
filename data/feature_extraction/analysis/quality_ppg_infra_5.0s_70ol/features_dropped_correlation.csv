@@ -1,10 +1,10 @@
 feature,reason,value
-ppg_infra_signal_rms,|corr|>=0.95,1.0
-ppg_infra_tke_mean_abs,|corr|>=0.95,1.0
+ppg_infra_tke_mean,|corr|>=0.95,1.0
 ppg_infra_diff_mean,|corr|>=0.95,1.0
 ppg_infra_dx_std,|corr|>=0.95,1.0
+ppg_infra_rms,|corr|>=0.95,1.0
 ppg_infra_diff_rms,|corr|>=0.95,0.9999989077132083
-ppg_infra_rms,|corr|>=0.95,0.9999906324637582
+ppg_infra_signal_rms,|corr|>=0.95,0.9999906324637582
 ppg_infra_mad,|corr|>=0.95,0.9952575646638226
 ppg_infra_range,|corr|>=0.95,0.9942548551023269
 ppg_infra_std,|corr|>=0.95,0.9920726013212364

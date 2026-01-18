@@ -3,7 +3,7 @@ ppg_infra_dx_kurtosis
 ppg_infra_p95
 ppg_infra_mad
 ppg_infra_p5
-ppg_infra_tke_mean
+ppg_infra_tke_mean_abs
 ppg_infra_tke_std
 ppg_infra_signal_energy
 ppg_infra_ddx_std

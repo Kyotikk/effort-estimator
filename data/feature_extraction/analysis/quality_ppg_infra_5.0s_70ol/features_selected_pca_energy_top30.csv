@@ -1,6 +1,6 @@
 ppg_infra_ddx_kurtosis
 ppg_infra_iqr
-ppg_infra_tke_mean
+ppg_infra_tke_mean_abs
 ppg_infra_p90
 ppg_infra_diff_mean_abs
 ppg_infra_dx_kurtosis

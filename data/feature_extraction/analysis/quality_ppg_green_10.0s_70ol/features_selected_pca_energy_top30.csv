@@ -16,6 +16,6 @@ ppg_green_p99_p1
 ppg_green_skew
 ppg_green_shape_factor
 ppg_green_p95
-ppg_green_diff_mean
+ppg_green_dx_mean
 ppg_green_mean_cross_rate
 ppg_green_ddx_mean
