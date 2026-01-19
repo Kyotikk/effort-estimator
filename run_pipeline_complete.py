@@ -1,442 +1,457 @@
 #!/usr/bin/env python3
 """
-Complete Pipeline Orchestrator - All 7 Phases
-Using exact working code from pascal_update branch
+Multi-subject pipeline runner.
+
+Processes multiple subjects (sim_elderly3, sim_healthy3, sim_severe3)
+through the full pipeline, then combines and trains a multi-subject model.
 """
+
+import os
 import sys
-import argparse
-from pathlib import Path
+import subprocess
 import yaml
+from pathlib import Path
 import pandas as pd
 import numpy as np
+from pipeline.feature_selection_and_qc import select_and_prune_features, perform_pca_analysis, save_feature_selection_results
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent))
+DATA_ROOT = "/Users/pascalschlegel/data/interim/parsingsim3"
+SUBJECTS = ["sim_elderly3", "sim_healthy3", "sim_severe3"]
+WINDOW_LENGTH = 10.0
 
-# Phase 1: Preprocessing
-from pipeline.phase1_preprocessing.imu import preprocess_imu
-from pipeline.phase1_preprocessing.ppg import preprocess_ppg  
-from pipeline.phase1_preprocessing.eda import preprocess_eda
-from pipeline.phase1_preprocessing.rr import preprocess_rr
 
-# Phase 2: Windowing
-from pipeline.phase2_windowing.windows import create_windows
+def find_file(subject_path, pattern_parts, exclude_gz=False):
+    """Find a file matching pattern parts in subject directory.
+    
+    For multiple matches, prefers the most recently modified file.
+    If exclude_gz=True, prioritizes uncompressed .csv over .csv.gz files.
+    """
+    base = Path(subject_path)
+    for i, part in enumerate(pattern_parts):
+        matches = list(base.glob(f"*{part}*"))
+        if not matches:
+            return None
+        
+        # If this is the last part AND exclude_gz is True, filter out .gz files
+        if i == len(pattern_parts) - 1 and exclude_gz:
+            matches = [m for m in matches if not str(m).endswith('.gz')]
+        
+        # If no matches after filtering, return None
+        if not matches:
+            return None
+        
+        # Sort by modification time and pick the most recent
+        matches.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        base = matches[0]
+    
+    # If we end up with a directory, find the actual file inside
+    if base.is_dir():
+        if exclude_gz:
+            # Prioritize uncompressed .csv over .csv.gz
+            csv_files = [f for f in base.glob("*.csv") if not str(f).endswith('.csv.gz')]
+            if csv_files:
+                csv_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+                return str(csv_files[0])
+            return None
+        
+        # Standard search: try uncompressed .csv first, then .csv.gz
+        uncompressed = [f for f in base.glob("*.csv") if not str(f).endswith('.csv.gz')]
+        if uncompressed:
+            uncompressed.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            return str(uncompressed[0])
+        
+        gz_files = sorted(base.glob("*.csv.gz"), key=lambda x: x.stat().st_mtime, reverse=True)
+        if gz_files:
+            return str(gz_files[0])
+        
+        return None
+    
+    return str(base)
 
-# Phase 3: Features
-from pipeline.phase3_features.imu_features import compute_top_imu_features_from_windows
-from pipeline.phase3_features.ppg_features import extract_ppg_features
-from pipeline.phase3_features.eda_features import extract_eda_features
 
-# Phase 5: Alignment (ADL/Borg labels)
-from pipeline.phase5_alignment.adl_alignment import parse_adl_intervals, align_windows_to_borg
+def generate_config(subject):
+    """Generate pipeline config for a specific subject."""
+    subject_path = Path(DATA_ROOT) / subject
+    
+    output_dir = subject_path / "effort_estimation_output"
+    
+    # Find all required data files
+    imu_bioz_path = find_file(subject_path, ["corsano_bioz_acc"])
+    imu_wrist_path = find_file(subject_path, ["corsano_wrist_acc"])
+    ppg_green_path = find_file(subject_path, ["corsano_wrist_ppg2_green"])
+    ppg_infra_path = find_file(subject_path, ["corsano_wrist_ppg2_infra"])
+    ppg_red_path = find_file(subject_path, ["corsano_wrist_ppg2_red"])
+    eda_path = find_file(subject_path, ["corsano_bioz_emography"])
+    rr_path = find_file(subject_path, ["corsano_bioz_rr_interval"])
+    adl_path = find_file(subject_path, ["scai_app", "ADLs"], exclude_gz=True)
+    
+    # Verify all files exist
+    required_files = {
+        "imu_bioz": imu_bioz_path,
+        "imu_wrist": imu_wrist_path,
+        "ppg_green": ppg_green_path,
+        "ppg_infra": ppg_infra_path,
+        "ppg_red": ppg_red_path,
+        "eda": eda_path,
+        "rr": rr_path,
+        "adl": adl_path,
+    }
+    
+    missing = [k for k, v in required_files.items() if not v]
+    if missing:
+        print(f"  ⚠ Missing files for {subject}: {missing}")
+        return None
+    
+    config = {
+        "project": {
+            "name": "effort_estimation",
+            "output_dir": str(output_dir),
+        },
+        "datasets": [
+            {
+                "name": f"parsingsim3_{subject}",
+                "imu_bioz": {
+                    "path": imu_bioz_path,
+                    "fs_out": 32,
+                },
+                "imu_wrist": {
+                    "path": imu_wrist_path,
+                    "fs_out": 32,
+                },
+                "ppg_green": {
+                    "path": ppg_green_path,
+                    "fs_out": 32,
+                },
+                "ppg_infra": {
+                    "path": ppg_infra_path,
+                    "fs_out": 32,
+                },
+                "ppg_red": {
+                    "path": ppg_red_path,
+                    "fs_out": 32,
+                },
+                "eda": {
+                    "path": eda_path,
+                    "fs_out": 32,
+                },
+                "rr": {
+                    "path": rr_path,
+                    "fs_out": 1,
+                },
+            }
+        ],
+        "preprocessing": {
+            "imu_bioz": {
+                "noise_cutoff": 5.0,
+                "gravity_cutoff": 0.3,
+                "normalise": False,
+            },
+            "imu_wrist": {
+                "noise_cutoff": 5.0,
+                "gravity_cutoff": 0.3,
+                "normalise": False,
+            },
+            "ppg_green": {
+                "time_col": "time",
+                "metric_id": "0x7e",
+                "led_pd_pos": 6,
+                "led": None,
+                "do_resample": True,
+                "apply_hpf": False,
+            },
+            "ppg_infra": {
+                "time_col": "time",
+                "metric_id": "0x7b",
+                "led_pd_pos": 22,
+                "led": None,
+                "do_resample": True,
+                "apply_hpf": True,
+                "hpf_cutoff": 0.5,
+            },
+            "ppg_red": {
+                "time_col": "time",
+                "metric_id": "0x7c",
+                "led_pd_pos": 182,
+                "led": None,
+                "do_resample": True,
+                "apply_hpf": True,
+                "hpf_cutoff": 0.5,
+            },
+            "rr": {
+                "time_col": "time",
+                "rr_col": "rr",
+            },
+            "eda": {
+                "time_col": "time",
+                "do_resample": True,
+            },
+        },
+        "windowing": {
+            "overlap": 0.7,
+            "window_lengths_sec": [10.0, 5.0, 2.0],
+        },
+        "features": {
+            "imu_bioz": {
+                "modality": "imu",
+                "signals": ["acc_x_dyn", "acc_y_dyn", "acc_z_dyn"],
+                "feature_set": "stat",
+                "safe": True,
+                "njobs": 1,
+            },
+            "imu_wrist": {
+                "modality": "imu",
+                "signals": ["acc_x_dyn", "acc_y_dyn", "acc_z_dyn"],
+                "feature_set": "stat",
+                "safe": True,
+                "njobs": 1,
+            },
+            "ppg_green": {
+                "modality": "ppg_green",
+                "prefix": "ppg_green_",
+                "time_col": "t_sec",
+                "signal_col": "value",
+            },
+            "ppg_infra": {
+                "modality": "ppg_infra",
+                "prefix": "ppg_infra_",
+                "time_col": "t_sec",
+                "signal_col": "value",
+            },
+            "ppg_red": {
+                "modality": "ppg_red",
+                "prefix": "ppg_red_",
+                "time_col": "t_sec",
+                "signal_col": "value",
+            },
+            "rr": {
+                "modality": "rr",
+                "prefix": "rr_",
+                "time_col": "t_sec",
+                "signal_col": "value",
+            },
+            "eda": {
+                "modality": "eda",
+                "prefix": "eda_",
+                "time_col": "t_sec",
+                "cc_col": "eda_cc",
+                "stress_col": "eda_stress_skin",
+            },
+        },
+        "targets": {
+            "imu": {
+                "adl_path": adl_path,
+            }
+        },
+        "fusion": {
+            "output_dir": str(output_dir / f"parsingsim3_{subject}"),
+            "window_lengths_sec": [10.0, 5.0, 2.0],
+            "tolerance_s": {
+                "2.0": 2.0,
+                "5.0": 2.0,
+                "10.0": 2.0,
+            },
+            "modalities": {
+                "imu_bioz": f"{output_dir}/parsingsim3_{subject}/imu_bioz/imu_features_{{window_length}}.csv",
+                "imu_wrist": f"{output_dir}/parsingsim3_{subject}/imu_wrist/imu_features_{{window_length}}.csv",
+                "ppg_green": f"{output_dir}/parsingsim3_{subject}/ppg_green/ppg_green_features_{{window_length}}.csv",
+                "ppg_infra": f"{output_dir}/parsingsim3_{subject}/ppg_infra/ppg_infra_features_{{window_length}}.csv",
+                "ppg_red": f"{output_dir}/parsingsim3_{subject}/ppg_red/ppg_red_features_{{window_length}}.csv",
+                "eda": f"{output_dir}/parsingsim3_{subject}/eda/eda_features_{{window_length}}.csv",
+            },
+        },
+        "logging": {
+            "verbose": True,
+        },
+    }
+    
+    return config
+
+
+def run_subject_pipeline(subject):
+    """Run pipeline for a single subject."""
+    print(f"\n{'='*70}")
+    print(f"SUBJECT: {subject}")
+    print(f"{'='*70}")
+    
+    # Generate config
+    config = generate_config(subject)
+    if not config:
+        print(f"✗ Could not generate config for {subject}")
+        return False
+    
+    # Write config to temporary file
+    config_path = Path(f"/tmp/pipeline_{subject}.yaml")
+    with open(config_path, "w") as f:
+        yaml.dump(config, f)
+    
+    print(f"✓ Config: {config_path}")
+    
+    # Run pipeline
+    print(f"▶ Running pipeline...")
+    result = subprocess.run(
+        [sys.executable, "run_pipeline.py", str(config_path)],
+        cwd="/Users/pascalschlegel/effort-estimator",
+    )
+    
+    if result.returncode != 0:
+        print(f"✗ Pipeline failed for {subject}")
+        return False
+    
+    print(f"✓ Pipeline completed for {subject}")
+    return True
+
+
+def combine_datasets(subjects, window_length):
+    """Combine aligned fused features from multiple subjects."""
+    print(f"\n{'='*70}")
+    print(f"COMBINING DATASETS (window={window_length}s)")
+    print(f"{'='*70}")
+    
+    dfs = []
+    for subject in subjects:
+        aligned_path = (
+            Path(DATA_ROOT)
+            / subject
+            / "effort_estimation_output"
+            / f"parsingsim3_{subject}"
+            / f"fused_aligned_{window_length:.1f}s.csv"
+        )
+        
+        if not aligned_path.exists():
+            print(f"  ⚠ Missing: {aligned_path}")
+            continue
+        
+        df = pd.read_csv(aligned_path)
+        df["subject"] = subject
+        dfs.append(df)
+        print(f"  ✓ {subject}: {len(df)} samples")
+    
+    if not dfs:
+        print("✗ No data to combine!")
+        return None
+    
+    combined = pd.concat(dfs, ignore_index=True)
+    print(f"\n✓ Combined: {len(combined)} total samples")
+    print(f"  Labeled: {combined['borg'].notna().sum()}")
+    
+    return combined
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True, help="Path to pipeline.yaml")
-    parser.add_argument("--subject", help="Specific subject to process")
-    parser.add_argument("--skip-preprocessing", action="store_true")
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Multi-subject pipeline runner")
+    parser.add_argument(
+        "--subjects",
+        nargs="+",
+        default=SUBJECTS,
+        help="Subjects to process",
+    )
+    parser.add_argument(
+        "--skip-pipeline",
+        action="store_true",
+        help="Skip individual subject pipelines (use cached results)",
+    )
     args = parser.parse_args()
     
-    with open(args.config) as f:
-        config = yaml.safe_load(f)
+    # Run individual subject pipelines
+    if not args.skip_pipeline:
+        succeeded = []
+        for subject in args.subjects:
+            if run_subject_pipeline(subject):
+                succeeded.append(subject)
+        
+        if not succeeded:
+            print("\n✗ No subjects completed successfully!")
+            return 1
+        
+        print(f"\n✓ Completed: {len(succeeded)}/{len(args.subjects)} subjects")
+    else:
+        succeeded = args.subjects
     
-    datasets = config["datasets"]
-    if args.subject:
-        datasets = [ds for ds in datasets if ds["name"] == args.subject]
+    # Combine datasets
+    combined = combine_datasets(succeeded, WINDOW_LENGTH)
+    if combined is None:
+        return 1
     
-    for dataset in datasets:
-        subject = dataset["name"]
-        print(f"\n{'='*70}")
-        print(f"Processing: {subject}")
-        print(f"{'='*70}")
-        
-        output_dir = Path(config["project"]["output_dir"]) / subject
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # =====================================================================
-        # PHASE 1: PREPROCESSING
-        # =====================================================================
-        print("\n[PHASE 1] Preprocessing...")
-        
-        if not args.skip_preprocessing:
-            # IMU bioz
-            imu_bioz_df = preprocess_imu(
-                path=dataset["imu_bioz"]["path"],
-                fs_out=dataset["imu_bioz"]["fs_out"],
-            )
-            print(f"  ✓ IMU bioz: {len(imu_bioz_df)} samples")
-            
-            # IMU wrist  
-            imu_wrist_df = preprocess_imu(
-                path=dataset["imu_wrist"]["path"],
-                fs_out=dataset["imu_wrist"]["fs_out"],
-            )
-            print(f"  ✓ IMU wrist: {len(imu_wrist_df)} samples")
-            
-            # PPG variants
-            ppg_green_path = output_dir / "ppg_green_preprocessed.csv"
-            preprocess_ppg(
-                in_path=dataset["ppg_green"]["path"],
-                out_path=str(ppg_green_path),
-                fs=dataset["ppg_green"]["fs_out"],
-            )
-            ppg_green_df = pd.read_csv(ppg_green_path)
-            print(f"  ✓ PPG green: {len(ppg_green_df)} samples")
-            
-            ppg_infra_path = output_dir / "ppg_infra_preprocessed.csv"
-            preprocess_ppg(
-                in_path=dataset["ppg_infra"]["path"],
-                out_path=str(ppg_infra_path),
-                fs=dataset["ppg_infra"]["fs_out"],
-            )
-            ppg_infra_df = pd.read_csv(ppg_infra_path)
-            print(f"  ✓ PPG infra: {len(ppg_infra_df)} samples")
-            
-            ppg_red_path = output_dir / "ppg_red_preprocessed.csv"
-            preprocess_ppg(
-                in_path=dataset["ppg_red"]["path"],
-                out_path=str(ppg_red_path),
-                fs=dataset["ppg_red"]["fs_out"],
-            )
-            ppg_red_df = pd.read_csv(ppg_red_path)
-            print(f"  ✓ PPG red: {len(ppg_red_df)} samples")
-            
-            # EDA
-            eda_path = output_dir / "eda_preprocessed.csv"
-            preprocess_eda(
-                in_path=dataset["eda"]["path"],
-                out_path=str(eda_path),
-                fs=dataset["eda"]["fs_out"],
-                do_resample=True,
-            )
-            eda_df = pd.read_csv(eda_path)
-            print(f"  ✓ EDA: {len(eda_df)} samples")
-            
-            # RR
-            rr_path = output_dir / "rr_preprocessed.csv"
-            preprocess_rr(
-                in_path=dataset["rr"]["path"],
-                out_path=str(rr_path),
-            )
-            rr_df = pd.read_csv(rr_path)
-            print(f"  ✓ RR: {len(rr_df)} samples")
-        else:
-            # Load preprocessed
-            imu_bioz_df = pd.read_csv(output_dir / "imu_bioz_preprocessed.csv") if (output_dir / "imu_bioz_preprocessed.csv").exists() else None
-            imu_wrist_df = pd.read_csv(output_dir / "imu_wrist_preprocessed.csv") if (output_dir / "imu_wrist_preprocessed.csv").exists() else None
-            ppg_green_df = pd.read_csv(output_dir / "ppg_green_preprocessed.csv") if (output_dir / "ppg_green_preprocessed.csv").exists() else None
-            ppg_infra_df = pd.read_csv(output_dir / "ppg_infra_preprocessed.csv") if (output_dir / "ppg_infra_preprocessed.csv").exists() else None
-            ppg_red_df = pd.read_csv(output_dir / "ppg_red_preprocessed.csv") if (output_dir / "ppg_red_preprocessed.csv").exists() else None
-            eda_df = pd.read_csv(output_dir / "eda_preprocessed.csv") if (output_dir / "eda_preprocessed.csv").exists() else None
-            rr_df = pd.read_csv(output_dir / "rr_preprocessed.csv") if (output_dir / "rr_preprocessed.csv").exists() else None
-            print("  ✓ Loaded preprocessed data")
-        
-        # =====================================================================
-        # PHASE 2: WINDOWING
-        # =====================================================================
-        print("\n[PHASE 2] Windowing...")
-        win_sec = config["windowing"]["window_lengths_sec"][0]
-        overlap = config["windowing"]["overlap"]
-        
-        imu_bioz_windows = create_windows(imu_bioz_df, fs=dataset["imu_bioz"]["fs_out"], win_sec=win_sec, overlap=overlap)
-        imu_wrist_windows = create_windows(imu_wrist_df, fs=dataset["imu_wrist"]["fs_out"], win_sec=win_sec, overlap=overlap)
-        ppg_green_windows = create_windows(ppg_green_df, fs=dataset["ppg_green"]["fs_out"], win_sec=win_sec, overlap=overlap)
-        ppg_infra_windows = create_windows(ppg_infra_df, fs=dataset["ppg_infra"]["fs_out"], win_sec=win_sec, overlap=overlap)
-        ppg_red_windows = create_windows(ppg_red_df, fs=dataset["ppg_red"]["fs_out"], win_sec=win_sec, overlap=overlap)
-        eda_windows = create_windows(eda_df, fs=dataset["eda"]["fs_out"], win_sec=win_sec, overlap=overlap)
-        
-        # Save windows to CSV (needed for feature extraction)
-        imu_bioz_win_path = output_dir / f"imu_bioz_windows_{win_sec:.1f}s.csv"
-        imu_wrist_win_path = output_dir / f"imu_wrist_windows_{win_sec:.1f}s.csv"
-        ppg_green_win_path = output_dir / f"ppg_green_windows_{win_sec:.1f}s.csv"
-        ppg_infra_win_path = output_dir / f"ppg_infra_windows_{win_sec:.1f}s.csv"
-        ppg_red_win_path = output_dir / f"ppg_red_windows_{win_sec:.1f}s.csv"
-        eda_win_path = output_dir / f"eda_windows_{win_sec:.1f}s.csv"
-        
-        imu_bioz_windows.to_csv(imu_bioz_win_path, index=False)
-        imu_wrist_windows.to_csv(imu_wrist_win_path, index=False)
-        ppg_green_windows.to_csv(ppg_green_win_path, index=False)
-        ppg_infra_windows.to_csv(ppg_infra_win_path, index=False)
-        ppg_red_windows.to_csv(ppg_red_win_path, index=False)
-        eda_windows.to_csv(eda_win_path, index=False)
-        
-        # Save preprocessed data to CSV too (some need this)
-        imu_bioz_df.to_csv(output_dir / "imu_bioz_preprocessed.csv", index=False)
-        imu_wrist_df.to_csv(output_dir / "imu_wrist_preprocessed.csv", index=False)
-        ppg_green_df.to_csv(output_dir / "ppg_green_preprocessed_resave.csv", index=False)
-        ppg_infra_df.to_csv(output_dir / "ppg_infra_preprocessed_resave.csv", index=False)
-        ppg_red_df.to_csv(output_dir / "ppg_red_preprocessed_resave.csv", index=False)
-        eda_df.to_csv(output_dir / "eda_preprocessed_resave.csv", index=False)
-        
-        print(f"  ✓ IMU bioz: {len(imu_bioz_windows)} windows")
-        print(f"  ✓ IMU wrist: {len(imu_wrist_windows)} windows")
-        print(f"  ✓ PPG: {len(ppg_green_windows)} windows")
-        print(f"  ✓ EDA: {len(eda_windows)} windows")
-        
-        # =====================================================================
-        # PHASE 3: FEATURE EXTRACTION
-        # =====================================================================
-        print("\n[PHASE 3] Feature Extraction...")
-        
-        # IMU features
-        imu_feat_cfg = config["features"].get("imu", {})
-        imu_bioz_feats = compute_top_imu_features_from_windows(
-            data=imu_bioz_df,
-            windows=imu_bioz_windows,
-            signal_cols=imu_feat_cfg.get("signals", ["acc_x_dyn", "acc_y_dyn", "acc_z_dyn"]),
-            quiet=True,
-        )
-        imu_bioz_feats["modality"] = "imu_bioz"
-        print(f"  ✓ IMU bioz features: {len(imu_bioz_feats)} windows, {len(imu_bioz_feats.columns)} features")
-        
-        imu_wrist_feats = compute_top_imu_features_from_windows(
-            data=imu_wrist_df,
-            windows=imu_wrist_windows,
-            signal_cols=imu_feat_cfg.get("signals", ["acc_x_dyn", "acc_y_dyn", "acc_z_dyn"]),
-            quiet=True,
-        )
-        imu_wrist_feats["modality"] = "imu_wrist"
-        print(f"  ✓ IMU wrist features: {len(imu_wrist_feats)} windows, {len(imu_wrist_feats.columns)} features")
-        
-        # PPG features
-        ppg_feat_cfg = config["features"].get("ppg_green", {})
-        
-        ppg_green_feat_path = output_dir / f"ppg_green_features_{win_sec:.1f}s.csv"
-        ppg_green_feats = extract_ppg_features(
-            ppg_csv=str(ppg_green_path),
-            windows_csv=str(ppg_green_win_path),
-            time_col=ppg_feat_cfg.get("time_col", "t_sec"),
-            signal_col=ppg_feat_cfg.get("signal_col", "ppg_signal"),
-            prefix="ppg_green_",
-        )
-        ppg_green_feats["modality"] = "ppg_green"
-        ppg_green_feats.to_csv(ppg_green_feat_path, index=False)
-        print(f"  ✓ PPG green features: {len(ppg_green_feats)} windows, {len(ppg_green_feats.columns)} features")
-        
-        ppg_infra_feat_path = output_dir / f"ppg_infra_features_{win_sec:.1f}s.csv"
-        ppg_infra_feats = extract_ppg_features(
-            ppg_csv=str(ppg_infra_path),
-            windows_csv=str(ppg_infra_win_path),
-            time_col=ppg_feat_cfg.get("time_col", "t_sec"),
-            signal_col=ppg_feat_cfg.get("signal_col", "ppg_signal"),
-            prefix="ppg_infra_",
-        )
-        ppg_infra_feats["modality"] = "ppg_infra"
-        ppg_infra_feats.to_csv(ppg_infra_feat_path, index=False)
-        print(f"  ✓ PPG infra features: {len(ppg_infra_feats)} windows, {len(ppg_infra_feats.columns)} features")
-        
-        ppg_red_feat_path = output_dir / f"ppg_red_features_{win_sec:.1f}s.csv"
-        ppg_red_feats = extract_ppg_features(
-            ppg_csv=str(ppg_red_path),
-            windows_csv=str(ppg_red_win_path),
-            time_col=ppg_feat_cfg.get("time_col", "t_sec"),
-            signal_col=ppg_feat_cfg.get("signal_col", "ppg_signal"),
-            prefix="ppg_red_",
-        )
-        ppg_red_feats["modality"] = "ppg_red"
-        ppg_red_feats.to_csv(ppg_red_feat_path, index=False)
-        print(f"  ✓ PPG red features: {len(ppg_red_feats)} windows, {len(ppg_red_feats.columns)} features")
-        
-        # EDA features
-        eda_feat_cfg = config["features"].get("eda", {})
-        
-        eda_feat_path = output_dir / f"eda_features_{win_sec:.1f}s.csv"
-        eda_feats = extract_eda_features(
-            eda_csv=str(eda_path),
-            windows_csv=str(eda_win_path),
-            time_col=eda_feat_cfg.get("time_col", "t_sec"),
-            cc_col=eda_feat_cfg.get("cc_col", "eda_cc"),
-            stress_col=eda_feat_cfg.get("stress_col", "eda_stress_skin"),
-            prefix="eda_",
-        )
-        eda_feats["modality"] = "eda"
-        eda_feats.to_csv(eda_feat_path, index=False)
-        print(f"  ✓ EDA features: {len(eda_feats)} windows, {len(eda_feats.columns)} features")
-        
-        # =====================================================================
-        # PHASE 4: FUSION
-        # =====================================================================
-        print("\n[PHASE 4] Fusion - Combine all modality features...")
-        
-        # Combine all features: merge on window_id
-        all_feats = []
-        for feats_df in [imu_bioz_feats, imu_wrist_feats, ppg_green_feats, ppg_infra_feats, ppg_red_feats, eda_feats]:
-            # Keep modality column + feature columns
-            feat_cols = [c for c in feats_df.columns if c not in ["window_id", "start_idx", "end_idx", "t_start", "t_center", "t_end"]]
-            all_feats.append(feats_df[["window_id"] + feat_cols])
-        
-        # Merge on window_id
-        fused = all_feats[0]
-        for feat_df in all_feats[1:]:
-            fused = fused.merge(feat_df, on="window_id", how="inner", suffixes=("", "_dup"))
-        
-        # Keep window metadata
-        for meta_col in ["start_idx", "end_idx", "t_start", "t_center", "t_end"]:
-            if meta_col in imu_bioz_feats.columns:
-                fused[meta_col] = imu_bioz_feats[meta_col].iloc[:len(fused)]
-        
-        fused_path = output_dir / f"fused_features_{win_sec:.1f}s.csv"
-        fused.to_csv(fused_path, index=False)
-        print(f"  ✓ Fused: {len(fused)} windows, {len(fused.columns) - 1} features")
-        
-        # =====================================================================
-        # PHASE 5: ALIGNMENT - Integrate real Borg effort labels from ADL
-        # =====================================================================
-        print("\n[PHASE 5] Alignment - Add Borg effort labels from ADL...")
-        
-        # Get ADL path from config
-        adl_path = config.get("targets", {}).get("imu", {}).get("adl_path")
-        
-        if adl_path and Path(adl_path).exists():
-            try:
-                # Parse ADL intervals to get Borg labels for each activity
-                intervals = parse_adl_intervals(Path(adl_path))
-                
-                # Align windows to Borg labels (assigns borg value based on window's t_center)
-                fused = align_windows_to_borg(fused, intervals)
-                
-                n_labeled = int(fused["borg"].notna().sum())
-                print(f"  ✓ Aligned: {len(fused)} windows, {n_labeled} with Borg labels")
-                
-            except Exception as e:
-                print(f"  ⚠ ADL alignment failed: {e}")
-                print(f"  ⚠ Falling back to dummy labels...")
-                fused["borg"] = np.random.randint(0, 11, len(fused))
-        else:
-            print(f"  ⚠ ADL file not found at {adl_path}")
-            print(f"  ⚠ Using dummy effort labels for testing...")
-            fused["borg"] = np.random.randint(0, 11, len(fused))
-        
-        aligned_path = output_dir / f"aligned_features_{win_sec:.1f}s.csv"
-        fused.to_csv(aligned_path, index=False)
-        print(f"  ✓ Saved: {aligned_path}")
-        
-        # =====================================================================
-        # PHASE 6: FEATURE SELECTION (match pascal_update)
-        # =====================================================================
-        print("\n[PHASE 6] Feature Selection - Correlation-based ranking + pruning (train-only)...")
-        from sklearn.model_selection import train_test_split
-        from pipeline.feature_selection_and_qc import select_and_prune_features
-        
-        # Match pascal_update: drop metadata + autocorr (_r) columns
-        skip_cols = {
-            "window_id", "start_idx", "end_idx", "valid",
-            "t_start", "t_center", "t_end", "n_samples", "win_sec",
-            "modality", "subject", "borg", "effort",
-            "modality_dup", "valid_dup", "n_samples_dup", "win_sec_dup",
-        }
-
-        def is_metadata(col: str) -> bool:
-            if col in skip_cols:
-                return True
-            if col.endswith("_r") or any(col.endswith(f"_r.{i}") for i in range(1, 10)):
-                return True
-            return False
-
-        feature_cols = [c for c in fused.columns if not is_metadata(c)]
-        feature_cols = [c for c in feature_cols if pd.api.types.is_numeric_dtype(fused[c])]
-        
-        # Only use labeled samples for selection/training
-        if "borg" in fused.columns and fused["borg"].notna().sum() > 0:
-            fused_labeled = fused.dropna(subset=["borg"]).copy()
-            if len(fused_labeled) < 10:
-                print(f"  ⚠ Only {len(fused_labeled)} labeled samples, skipping feature selection/training...")
-                y = None
-            else:
-                X_all = fused_labeled[feature_cols].fillna(0).values
-                y = fused_labeled["borg"].values
-                # Train/test split BEFORE feature selection (same as pascal_update)
-                X_train, X_test, y_train, y_test = train_test_split(X_all, y, test_size=0.2, random_state=42)
-        else:
-            print(f"  ⚠ No Borg labels available, skipping feature selection...")
-            y = None
-        
-        if y is not None:
-            top_n = min(100, X_train.shape[1])
-            pruned_indices, pruned_cols = select_and_prune_features(
-                X_train, y_train, feature_cols, corr_threshold=0.90, top_n=top_n
-            )
-
-            top_features = [feature_cols[i] for i in pruned_indices]
-            base_cols = ["window_id", "start_idx", "end_idx", "t_start", "t_center", "t_end"]
-            if "borg" in fused.columns:
-                base_cols.append("borg")
-            selected = fused[base_cols + top_features]
-            selected_path = output_dir / f"selected_features_{win_sec:.1f}s.csv"
-            selected.to_csv(selected_path, index=False)
-            print(f"  ✓ Selected: {len(top_features)} top features from {len(feature_cols)}")
-        else:
-            # No Borg labels, use all features
-            top_features = feature_cols
-            base_cols = ["window_id", "start_idx", "end_idx", "t_start", "t_center", "t_end"]
-            if "borg" in fused.columns:
-                base_cols.append("borg")
-            selected = fused[base_cols + top_features]
-            selected_path = output_dir / f"selected_features_{win_sec:.1f}s.csv"
-            selected.to_csv(selected_path, index=False)
-            print(f"  ✓ Selected: {len(top_features)} features (no Borg labels to rank by)")
-        
-        # =====================================================================
-        # PHASE 7: TRAINING
-        # =====================================================================
-        print("\n[PHASE 7] Training - XGBoost model...")
-        
-        from sklearn.metrics import r2_score, mean_squared_error
-        from sklearn.preprocessing import StandardScaler
-        import xgboost as xgb
-        
-        # Only train if we have Borg labels
-        if y is not None:
-            # Reuse train/test splits and selected indices from Phase 6
-            X_train_sel = X_train[:, pruned_indices]
-            X_test_sel = X_test[:, pruned_indices]
-
-            # Scale features (same as pascal_update)
-            scaler = StandardScaler()
-            X_train_scaled = scaler.fit_transform(X_train_sel)
-            X_test_scaled = scaler.transform(X_test_sel)
-            
-            # Train with same hyperparameters as pascal_update
-            model = xgb.XGBRegressor(
-                n_estimators=500,
-                max_depth=6,
-                learning_rate=0.1,
-                subsample=0.8,
-                colsample_bytree=0.8,
-                random_state=42,
-                n_jobs=-1,
-                verbosity=0,
-            )
-            model.fit(X_train_scaled, y_train, eval_set=[(X_test_scaled, y_test)], verbose=False)
-            
-            y_pred = model.predict(X_test_scaled)
-            r2 = r2_score(y_test, y_pred)
-            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-            
-            # Save model and scaler
-            model_path = output_dir / f"model_{win_sec:.1f}s.pkl"
-            scaler_path = output_dir / f"scaler_{win_sec:.1f}s.pkl"
-            import pickle
-            with open(model_path, "wb") as f:
-                pickle.dump(model, f)
-            with open(scaler_path, "wb") as f:
-                pickle.dump(scaler, f)
-            
-            print(f"  ✓ Model trained: R² = {r2:.4f}, RMSE = {rmse:.4f}")
-        else:
-            print(f"  ⚠ No Borg labels available, skipping model training...")
-        
-        print("\n" + "="*70)
-        print("✅ COMPLETE PIPELINE SUCCESS!")
-        print("="*70)
-        print(f"Output: {output_dir}")
-        print(f"Features: {len(top_features)} selected from {len(feature_cols)}")
-        if "borg" in selected.columns and selected["borg"].notna().sum() > 0:
-            print(f"Model: Trained on {len(y)} labeled windows")
-        else:
-            print(f"Model: Not trained (no Borg labels)")
+    # Save combined dataset
+    output_path = Path("/Users/pascalschlegel/data/interim/parsingsim3/multisub_combined")
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    combined_file = output_path / f"multisub_aligned_{WINDOW_LENGTH:.1f}s.csv"
+    combined.to_csv(combined_file, index=False)
+    print(f"\n✓ Saved combined dataset: {combined_file}")
+    
+    # Run feature selection on combined dataset
+    print(f"\n{'='*70}")
+    print(f"FEATURE SELECTION + QC")
+    print(f"{'='*70}")
+    
+    df_labeled = combined.dropna(subset=["borg"]).copy()
+    
+    # Remove metadata columns
+    skip_cols = {
+        "window_id", "start_idx", "end_idx", "valid",
+        "t_start", "t_center", "t_end", "n_samples", "win_sec",
+        "modality", "subject", "borg",
+    }
+    
+    def is_metadata(col):
+        if col in skip_cols:
+            return True
+        if col.endswith("_r") or any(col.endswith(f"_r.{i}") for i in range(1, 10)):
+            return True
+        return False
+    
+    feature_cols = [col for col in df_labeled.columns if not is_metadata(col)]
+    X = df_labeled[feature_cols].values
+    y = df_labeled["borg"].values
+    
+    print(f"  ✓ {len(feature_cols)} features (after metadata removal)")
+    print(f"  ✓ {len(df_labeled)} labeled samples for feature selection")
+    
+    # Feature selection + pruning
+    print(f"\n  Selecting top 100 features by correlation...")
+    pruned_indices, pruned_cols = select_and_prune_features(
+        X, y, feature_cols, 
+        corr_threshold=0.90, 
+        top_n=100
+    )
+    
+    # PCA analysis
+    X_pruned = X[:, pruned_indices]
+    explained_df, loadings_df, top_loadings_df, pcs_for_targets = perform_pca_analysis(
+        X_pruned, pruned_cols
+    )
+    
+    # Save feature selection outputs
+    feature_qc_dir = output_path / f"qc_{WINDOW_LENGTH:.1f}s"
+    save_feature_selection_results(
+        str(feature_qc_dir), 
+        pruned_cols, 
+        explained_df, 
+        loadings_df, 
+        top_loadings_df
+    )
+    
+    print(f"  ✓ Feature selection complete: {len(pruned_cols)} features selected")
+    print(f"  ✓ QC outputs saved to {feature_qc_dir}")
+    
+    # Summary stats
+    print(f"\n{'='*70}")
+    print(f"SUMMARY")
+    print(f"{'='*70}")
+    for subject in succeeded:
+        n_samples = len(combined[combined["subject"] == subject])
+        n_labeled = combined[combined["subject"] == subject]["borg"].notna().sum()
+        print(f"  {subject}: {n_samples} samples ({n_labeled} labeled)")
+    
+    print(f"\nTotal: {len(combined)} samples ({combined['borg'].notna().sum()} labeled)")
+    print(f"Features before selection: {len(feature_cols)}")
+    print(f"Features after selection: {len(pruned_cols)}")
+    
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

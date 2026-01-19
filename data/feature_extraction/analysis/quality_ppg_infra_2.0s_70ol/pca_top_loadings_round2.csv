@@ -30,16 +30,16 @@ PC4,ppg_infra_skew,0.13327388832093792
 PC4,ppg_infra_mean_cross_rate,0.0970550649421446
 PC4,ppg_infra_zcr,0.09594239167229363
 PC4,ppg_infra_p90,0.0724818158411427
-PC4,ppg_infra_dx_mean,0.03702123805010686
+PC4,ppg_infra_diff_mean,0.03702123805010686
 PC5,ppg_infra_skew,0.595094598367655
-PC5,ppg_infra_dx_mean,0.5210280053746668
+PC5,ppg_infra_diff_mean,0.5210280053746668
 PC5,ppg_infra_ddx_mean,0.4980643727617791
 PC5,ppg_infra_median,0.29866506723118047
 PC5,ppg_infra_p10,0.10103063460199863
 PC5,ppg_infra_p90,0.06760747544750349
 PC5,ppg_infra_dx_kurtosis,0.06157862509776035
 PC5,ppg_infra_shape_factor,0.05748166907760998
-PC6,ppg_infra_dx_mean,0.7076179526069323
+PC6,ppg_infra_diff_mean,0.7076179526069323
 PC6,ppg_infra_skew,0.4594196621184426
 PC6,ppg_infra_ddx_kurtosis,0.27278970910763545
 PC6,ppg_infra_clearance_factor,0.271643762613524
@@ -48,7 +48,7 @@ PC6,ppg_infra_crest_factor,0.1483402759073144
 PC6,ppg_infra_trim_mean_10,0.11616288444707228
 PC6,ppg_infra_ddx_mean,0.11165828389872709
 PC7,ppg_infra_clearance_factor,0.5335208247014496
-PC7,ppg_infra_dx_mean,0.44265018584984006
+PC7,ppg_infra_diff_mean,0.44265018584984006
 PC7,ppg_infra_ddx_kurtosis,0.35594732995261646
 PC7,ppg_infra_dx_kurtosis,0.3203258081808186
 PC7,ppg_infra_crest_factor,0.3113564691127546
@@ -59,7 +59,7 @@ PC8,ppg_infra_ddx_mean,0.699142203095417
 PC8,ppg_infra_skew,0.5148565340225326
 PC8,ppg_infra_trim_mean_10,0.31374453879937136
 PC8,ppg_infra_median,0.2673853657200338
-PC8,ppg_infra_dx_mean,0.15964935640537598
+PC8,ppg_infra_diff_mean,0.15964935640537598
 PC8,ppg_infra_clearance_factor,0.13234557903425578
 PC8,ppg_infra_crest_factor,0.11440495383554704
 PC8,ppg_infra_shape_factor,0.08443444525395705

@@ -1,11 +1,11 @@
 feature,reason,value
-ppg_green_dx_mean,|corr|>=0.95,1.0
+ppg_green_diff_mean,|corr|>=0.95,1.0
+ppg_green_dx_std,|corr|>=0.95,1.0
+ppg_green_mean,|corr|>=0.95,1.0
 ppg_green_signal_rms,|corr|>=0.95,1.0
 ppg_green_tke_mean_abs,|corr|>=0.95,1.0
-ppg_green_mean_abs,|corr|>=0.95,1.0
-ppg_green_dx_std,|corr|>=0.95,1.0
 ppg_green_diff_rms,|corr|>=0.95,0.9999931504767292
-ppg_green_mean,|corr|>=0.95,0.9998865980466032
+ppg_green_mean_abs,|corr|>=0.95,0.9998865980466031
 ppg_green_impulse_factor,|corr|>=0.95,0.9997649645194576
 ppg_green_rms,|corr|>=0.95,0.9991725955386827
 ppg_green_max,|corr|>=0.95,0.9989117017132635

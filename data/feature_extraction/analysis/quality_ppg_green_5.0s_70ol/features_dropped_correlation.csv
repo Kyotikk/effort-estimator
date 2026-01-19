@@ -1,9 +1,9 @@
 feature,reason,value
 ppg_green_signal_rms,|corr|>=0.95,1.0
-ppg_green_tke_mean,|corr|>=0.95,1.0
-ppg_green_mean,|corr|>=0.95,1.0
-ppg_green_dx_std,|corr|>=0.95,1.0
+ppg_green_diff_std,|corr|>=0.95,1.0
 ppg_green_diff_mean,|corr|>=0.95,1.0
+ppg_green_tke_mean_abs,|corr|>=0.95,1.0
+ppg_green_mean,|corr|>=0.95,1.0
 ppg_green_diff_rms,|corr|>=0.95,0.9999418543588083
 ppg_green_mean_abs,|corr|>=0.95,0.9999219039367322
 ppg_green_impulse_factor,|corr|>=0.95,0.9997813077536775
@@ -19,9 +19,9 @@ ppg_green_p5,|corr|>=0.95,0.9937440820014659
 ppg_green_p95_p5,|corr|>=0.95,0.9901284132365317
 ppg_green_std,|corr|>=0.95,0.988233432707584
 ppg_green_median,|corr|>=0.95,0.9874834565530299
-ppg_green_tke_mean_abs,|corr|>=0.95,0.9856382185500646
+ppg_green_tke_mean,|corr|>=0.95,0.9856382185500648
 ppg_green_p99,|corr|>=0.95,0.9843037364370382
 ppg_green_diff_mean_abs,|corr|>=0.95,0.9732446733425912
-ppg_green_diff_std,|corr|>=0.95,0.9701636282665461
+ppg_green_dx_std,|corr|>=0.95,0.9701636282665461
 ppg_green_p99_p1,|corr|>=0.95,0.9537399484353636
 ppg_green_p90,|corr|>=0.95,0.9526665483599966

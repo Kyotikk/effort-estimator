@@ -2,7 +2,7 @@ PC,feature,abs_loading
 PC1,ppg_red_min,0.31985130517647864
 PC1,ppg_red_max,0.31441756104440566
 PC1,ppg_red_ddx_std,0.3130052024764124
-PC1,ppg_red_tke_mean_abs,0.277931863351601
+PC1,ppg_red_tke_mean,0.277931863351601
 PC1,ppg_red_iqr,0.2721558728099778
 PC1,ppg_red_signal_energy,0.27034842412437776
 PC1,ppg_red_tke_std,0.26952876081560356
@@ -13,7 +13,7 @@ PC2,ppg_red_clearance_factor,0.331241427320184
 PC2,ppg_red_shape_factor,0.32883981368157944
 PC2,ppg_red_signal_energy,0.278448565791015
 PC2,ppg_red_crest_factor,0.2742278677738025
-PC2,ppg_red_tke_mean_abs,0.2731671175196215
+PC2,ppg_red_tke_mean,0.2731671175196215
 PC2,ppg_red_iqr,0.2686078753392322
 PC3,ppg_red_mean,0.600842755749499
 PC3,ppg_red_trim_mean_10,0.5986964337456937
@@ -30,7 +30,7 @@ PC4,ppg_red_mean,0.08484468508452873
 PC4,ppg_red_ddx_kurtosis,0.08241614210543383
 PC4,ppg_red_trim_mean_10,0.06120232781117946
 PC4,ppg_red_crest_factor,0.060833549198066585
-PC4,ppg_red_tke_mean_abs,0.047296418475494505
+PC4,ppg_red_tke_mean,0.047296418475494505
 PC5,ppg_red_skew,0.6072308110310563
 PC5,ppg_red_dx_mean,0.4550848850783997
 PC5,ppg_red_median,0.4486757493755013
@@ -53,7 +53,7 @@ PC7,ppg_red_median,0.49219941711410914
 PC7,ppg_red_tke_std,0.19335457324054053
 PC7,ppg_red_ddx_kurtosis,0.15838403650206462
 PC7,ppg_red_max,0.14097405840285013
-PC7,ppg_red_tke_mean_abs,0.14094432942566038
+PC7,ppg_red_tke_mean,0.14094432942566038
 PC7,ppg_red_dx_mean,0.12274485148530342
 PC8,ppg_red_ddx_kurtosis,0.5948327988748725
 PC8,ppg_red_dx_kurtosis,0.5037824645157583
