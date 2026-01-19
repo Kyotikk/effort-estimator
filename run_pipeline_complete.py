@@ -321,7 +321,11 @@ def main():
         from sklearn.decomposition import PCA
         
         # Get feature columns (exclude borg, window metadata, modality)
-        exclude_cols = {"window_id", "start_idx", "end_idx", "t_start", "t_center", "t_end", "borg", "modality", "effort"}
+        exclude_cols = {
+            "window_id", "start_idx", "end_idx", "t_start", "t_center", "t_end", 
+            "borg", "effort", "modality", "modality_dup",
+            "valid", "valid_dup", "n_samples", "n_samples_dup", "win_sec", "win_sec_dup"
+        }
         feature_cols = [c for c in fused.columns if c not in exclude_cols]
         
         # Keep only numeric columns
