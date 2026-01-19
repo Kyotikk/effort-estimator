@@ -25,17 +25,17 @@ import pandas as pd
 import logging
 
 # Import all 7 phases
-from pipeline.01_preprocessing import (
+from pipeline.phase1_preprocessing import (
     preprocess_imu, preprocess_ppg, preprocess_eda, preprocess_rr
 )
-from pipeline.02_windowing import create_windows, quality_check_windows
-from pipeline.03_features import (
+from pipeline.phase2_windowing import create_windows, quality_check_windows
+from pipeline.phase3_features import (
     extract_imu_features, extract_ppg_features, extract_rr_features, extract_eda_features
 )
-from pipeline.04_fusion import fuse_modalities
-from pipeline.05_alignment import align_with_targets
-from pipeline.06_selection import select_features
-from pipeline.07_training import train_model, evaluate_model
+from pipeline.phase4_fusion import fuse_modalities
+from pipeline.phase5_alignment import align_with_targets
+from pipeline.phase6_selection import select_features
+from pipeline.phase7_training import train_model, evaluate_model
 
 # Setup logging
 logging.basicConfig(
