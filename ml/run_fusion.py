@@ -7,7 +7,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, Any
 
-from ml.fusion.fuse_windows import fuse_feature_tables
+from phases.phase4_fusion.fuse_windows import fuse_feature_tables
 from ml.features.sanitise import sanitise_features
 
 

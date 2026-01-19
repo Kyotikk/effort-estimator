@@ -30,7 +30,7 @@ def run_qc(in_csv: Path, out_dir: Path) -> None:
     subprocess.check_call(
         [
             sys.executable,
-            "windowing/feature_quality_check_any.py",
+            "phases/phase2_windowing/feature_quality_check_any.py",
             "--in_csv",
             str(in_csv),
             "--out_dir",
@@ -305,7 +305,7 @@ def run_pipeline(config_path: str) -> None:
                     subprocess.check_call(
                         [
                             sys.executable,
-                            "features/ppg_features.py",
+                            "phases/phase3_features/ppg_features.py",
                             "--ppg",
                             str(ppg_clean_path_local),
                             "--windows",
@@ -355,7 +355,7 @@ def run_pipeline(config_path: str) -> None:
                     subprocess.check_call(
                         [
                             sys.executable,
-                            "features/eda_features.py",
+                            "phases/phase3_features/eda_features.py",
                             "--eda",
                             str(eda_clean_path),
                             "--windows",

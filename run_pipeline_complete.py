@@ -291,10 +291,16 @@ def run_subject_pipeline(subject):
     result = subprocess.run(
         [sys.executable, "run_pipeline.py", str(config_path)],
         cwd="/Users/pascalschlegel/effort-estimator",
+        capture_output=True,
+        text=True,
     )
     
     if result.returncode != 0:
         print(f"✗ Pipeline failed for {subject}")
+        if result.stderr:
+            print(f"  Error stderr:\n{result.stderr}")
+        if result.stdout:
+            print(f"  Last stdout:\n{result.stdout[-1000:]}")
         return False
     
     print(f"✓ Pipeline completed for {subject}")

@@ -1,8 +1,8 @@
 feature,reason,value
 ppg_red_rms,|corr|>=0.95,1.0
-ppg_red_diff_std,|corr|>=0.95,1.0
 ppg_red_tke_mean,|corr|>=0.95,1.0
 ppg_red_diff_mean,|corr|>=0.95,1.0
+ppg_red_diff_std,|corr|>=0.95,1.0
 ppg_red_diff_rms,|corr|>=0.95,0.9999890215440459
 ppg_red_std,|corr|>=0.95,0.9998910011540938
 ppg_red_range,|corr|>=0.95,0.99890619958618
