@@ -7,17 +7,17 @@ import subprocess
 import sys
 import pandas as pd
 
-from preprocessing.imu import preprocess_imu
-from preprocessing.ppg import preprocess_ppg
-from preprocessing.eda import preprocess_eda
-from preprocessing.rr import preprocess_rr
+from phases.phase1_preprocessing.imu import preprocess_imu
+from phases.phase1_preprocessing.ppg import preprocess_ppg
+from phases.phase1_preprocessing.eda import preprocess_eda
+from phases.phase1_preprocessing.rr import preprocess_rr
 
-from windowing.windows import create_windows
-from features.manual_features_imu import compute_top_imu_features_from_windows
+from phases.phase2_windowing.windows import create_windows
+from phases.phase3_features.manual_features_imu import compute_top_imu_features_from_windows
 
 from ml.targets.run_target_alignment import run_alignment
 from ml.run_fusion import main as run_fusion
-from ml.feature_selection_and_qc import main as run_feature_selection
+from phases.phase6_feature_selection.feature_selection_and_qc import main as run_feature_selection
 
 
 def load_config(path: str) -> dict:

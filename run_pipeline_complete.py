@@ -13,7 +13,7 @@ import yaml
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from ml.feature_selection_and_qc import select_and_prune_features, perform_pca_analysis, save_feature_selection_results
+from phases.phase6_feature_selection.feature_selection_and_qc import select_and_prune_features, perform_pca_analysis, save_feature_selection_results
 
 DATA_ROOT = "/Users/pascalschlegel/data/interim/parsingsim3"
 SUBJECTS = ["sim_elderly3", "sim_healthy3", "sim_severe3"]
