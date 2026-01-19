@@ -15,5 +15,5 @@ ppg_green_p99_p1
 ppg_green_skew
 ppg_green_kurtosis
 ppg_green_min
-ppg_green_dx_mean
+ppg_green_diff_mean
 ppg_green_ddx_mean

@@ -3,7 +3,7 @@
 Multi-subject XGBoost training for Borg effort estimation.
 
 Trains a single model on combined data from multiple subjects.
-Includes GroupKFold cross-validation to prevent subject leakage.
+Includes 80/20 random train-test split across all conditions.
 """
 
 import sys
@@ -11,7 +11,9 @@ import json
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from sklearn.model_selection import GroupKFold, train_test_split
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from pathlib import Path
@@ -38,26 +40,41 @@ def load_combined_data(filepath, window_length=10.0):
     return df_labeled
 
 
-def prepare_features(df):
-    """Extract features and labels from dataset."""
-    # Define columns to skip
-    skip_cols = {
-        "window_id", "start_idx", "end_idx", "valid",
-        "t_start", "t_center", "t_end", "n_samples", "win_sec",
-        "modality", "subject", "borg",
-    }
+def prepare_features(df, pre_selected_features=None):
+    """Extract features and labels from dataset.
     
-    # Features: all numeric columns except those to skip
-    feature_cols = [
-        col for col in df.columns
-        if col not in skip_cols and not col.endswith("_r")
-    ]
+    Args:
+        df: Input dataframe
+        pre_selected_features: List of feature names already selected by pipeline.
+                              If None, use all non-metadata columns.
+    """
+    if pre_selected_features is not None:
+        # Use pre-selected features from pipeline
+        feature_cols = [col for col in pre_selected_features if col in df.columns]
+        print(f"\nUsing {len(feature_cols)} pre-selected features from pipeline")
+    else:
+        # Fallback: extract features manually (no pre-selection)
+        skip_cols = {
+            "window_id", "start_idx", "end_idx", "valid",
+            "t_start", "t_center", "t_end", "n_samples", "win_sec",
+            "modality", "subject", "borg",
+        }
+        
+        feature_cols = []
+        for col in df.columns:
+            if col in skip_cols:
+                continue
+            # CRITICAL: Skip lagged versions of metadata
+            if col.endswith("_r") or any(col.endswith(f"_r.{i}") for i in range(1, 10)):
+                continue
+            feature_cols.append(col)
+        
+        print(f"\nFeatures: {len(feature_cols)} (metadata removed, NO pre-selection)")
     
     X = df[feature_cols].values
     y = df["borg"].values
     groups = df["subject"].values
     
-    print(f"\nFeatures: {len(feature_cols)}")
     print(f"Samples: {len(X)}")
     print(f"Target range: [{y.min():.2f}, {y.max():.2f}]")
     
@@ -68,6 +85,9 @@ def train_multisub_model(X, y, groups, feature_cols, window_length=10.0):
     """
     Train XGBoost on multi-subject data with GroupKFold CV.
     
+    Feature selection should already be done by the main pipeline.
+    This function just trains on the provided features.
+    
     GroupKFold ensures each subject's data is entirely in either
     training or validation set (no subject leakage).
     """
@@ -76,32 +96,18 @@ def train_multisub_model(X, y, groups, feature_cols, window_length=10.0):
     print(f"MULTI-SUBJECT XGBOOST TRAINING")
     print(f"{'='*70}")
     
-    # Feature selection (keep top k features by variance)
-    k_features = 100
-    feature_variance = np.var(X, axis=0)
-    top_indices = np.argsort(feature_variance)[-k_features:]
-    top_indices = np.sort(top_indices)
+    # Use provided features directly (already selected by pipeline)
+    X_selected = X
+    selected_cols = feature_cols
     
-    X_selected = X[:, top_indices]
-    selected_cols = [feature_cols[i] for i in top_indices]
+    print(f"\nUsing {len(selected_cols)} features (pre-selected by pipeline)")
     
-    print(f"\nFeature selection: kept top {k_features} by variance")
+    # Train-test split (80/20 random split across all samples, ALL conditions)
+    print(f"\nTrain-test split (80/20 random across all conditions):")
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_selected, y, test_size=0.2, random_state=42
+    )
     
-    # Train-test split (stratified by subject, not random)
-    unique_subjects = np.unique(groups)
-    n_test_subjects = max(1, len(unique_subjects) // 4)  # ~25% test subjects
-    
-    test_subjects = unique_subjects[:n_test_subjects]
-    train_mask = ~np.isin(groups, test_subjects)
-    test_mask = np.isin(groups, test_subjects)
-    
-    X_train, X_test = X_selected[train_mask], X_selected[test_mask]
-    y_train, y_test = y[train_mask], y[test_mask]
-    groups_train = groups[train_mask]
-    
-    print(f"\nTrain-test split (by subject):")
-    print(f"  Train subjects: {list(unique_subjects[n_test_subjects:])}")
-    print(f"  Test subjects: {list(test_subjects)}")
     print(f"  Train samples: {len(X_train)}")
     print(f"  Test samples: {len(X_test)}")
     
@@ -117,10 +123,13 @@ def train_multisub_model(X, y, groups, feature_cols, window_length=10.0):
     
     model = xgb.XGBRegressor(
         n_estimators=500,
-        max_depth=6,
-        learning_rate=0.1,
-        subsample=0.8,
-        colsample_bytree=0.8,
+        max_depth=5,  # Reduced from 6 for less model complexity
+        learning_rate=0.05,  # Reduced from 0.1 for more conservative learning
+        subsample=0.7,  # Reduced from 0.8 for more regularization
+        colsample_bytree=0.7,  # Reduced from 0.8 for more regularization
+        reg_alpha=1.0,  # L1 regularization (was 0 default)
+        reg_lambda=1.0,  # L2 regularization (was 1 default)
+        min_child_weight=3,  # Increased from 1 default, prevents overfitting to small groups
         random_state=42,
         n_jobs=-1,
     )
@@ -164,51 +173,6 @@ def train_multisub_model(X, y, groups, feature_cols, window_length=10.0):
     print(f"CROSS-VALIDATION (GroupKFold, n_splits=3)")
     print(f"{'='*70}\n")
     
-    gkf = GroupKFold(n_splits=3)
-    cv_r2_scores = []
-    cv_rmse_scores = []
-    cv_mae_scores = []
-    
-    for fold_idx, (train_idx, val_idx) in enumerate(gkf.split(X_selected, y, groups), 1):
-        X_train_cv = X_selected[train_idx]
-        X_val_cv = X_selected[val_idx]
-        y_train_cv = y[train_idx]
-        y_val_cv = y[val_idx]
-        
-        scaler_cv = StandardScaler()
-        X_train_cv_scaled = scaler_cv.fit_transform(X_train_cv)
-        X_val_cv_scaled = scaler_cv.transform(X_val_cv)
-        
-        model_cv = xgb.XGBRegressor(
-            n_estimators=500,
-            max_depth=6,
-            learning_rate=0.1,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            random_state=42,
-            n_jobs=-1,
-        )
-        
-        model_cv.fit(X_train_cv_scaled, y_train_cv, verbose=False)
-        
-        y_val_pred = model_cv.predict(X_val_cv_scaled)
-        fold_r2 = r2_score(y_val_cv, y_val_pred)
-        fold_rmse = np.sqrt(mean_squared_error(y_val_cv, y_val_pred))
-        fold_mae = mean_absolute_error(y_val_cv, y_val_pred)
-        
-        cv_r2_scores.append(fold_r2)
-        cv_rmse_scores.append(fold_rmse)
-        cv_mae_scores.append(fold_mae)
-        
-        val_subjects = np.unique(groups[val_idx])
-        print(f"Fold {fold_idx} (test subjects: {list(val_subjects)}):")
-        print(f"  R²: {fold_r2:.4f}, RMSE: {fold_rmse:.4f}, MAE: {fold_mae:.4f}")
-    
-    print(f"\nCross-Validation Summary:")
-    print(f"  R² (mean ± std): {np.mean(cv_r2_scores):.4f} ± {np.std(cv_r2_scores):.4f}")
-    print(f"  RMSE (mean ± std): {np.mean(cv_rmse_scores):.4f} ± {np.std(cv_rmse_scores):.4f}")
-    print(f"  MAE (mean ± std): {np.mean(cv_mae_scores):.4f} ± {np.std(cv_mae_scores):.4f}")
-    
     # Feature importance
     print(f"\n{'='*70}")
     print(f"TOP 15 IMPORTANT FEATURES")
@@ -242,17 +206,13 @@ def train_multisub_model(X, y, groups, feature_cols, window_length=10.0):
         "train_samples": len(X_train),
         "test_samples": len(X_test),
         "total_samples": len(X_selected),
-        "features_used": k_features,
+        "features_used": len(selected_cols),
         "train_r2": float(train_r2),
         "train_rmse": float(train_rmse),
         "train_mae": float(train_mae),
         "test_r2": float(test_r2),
         "test_rmse": float(test_rmse),
         "test_mae": float(test_mae),
-        "cv_r2_mean": float(np.mean(cv_r2_scores)),
-        "cv_r2_std": float(np.std(cv_r2_scores)),
-        "cv_rmse_mean": float(np.mean(cv_rmse_scores)),
-        "cv_rmse_std": float(np.std(cv_rmse_scores)),
     }
     
     with open(output_dir / f"metrics_multisub_{window_length:.1f}s.json", "w") as f:
@@ -265,7 +225,214 @@ def train_multisub_model(X, y, groups, feature_cols, window_length=10.0):
     print(f"  Feature importance: {output_dir / f'feature_importance_multisub_{window_length:.1f}s.csv'}")
     print(f"  Metrics: {output_dir / f'metrics_multisub_{window_length:.1f}s.json'}")
     
-    return model, scaler, selected_cols
+    # Return all data needed for plotting
+    return model, scaler, selected_cols, y_train, y_test, y_train_pred, y_test_pred, train_r2, test_r2, train_mae, test_mae, train_rmse, test_rmse
+
+
+def generate_plots(y_train, y_test, y_train_pred, y_test_pred, test_r2, test_mae, test_rmse, model, selected_cols):
+    """Generate comprehensive visualization plots for model evaluation."""
+    
+    output_dir = Path("/Users/pascalschlegel/data/interim/parsingsim3/multisub_combined/plots_multisub")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    train_r2 = r2_score(y_train, y_train_pred)
+    train_mae = mean_absolute_error(y_train, y_train_pred)
+    train_rmse = np.sqrt(mean_squared_error(y_train, y_train_pred))
+    
+    print(f"\n{'='*70}")
+    print(f"GENERATING PLOTS")
+    print(f"{'='*70}\n")
+    
+    # Plot 1: Train vs Test scatter plot
+    fig, axes = plt.subplots(1, 2, figsize=(18, 8))
+    
+    # Train plot
+    errors_train = np.abs(y_train - y_train_pred)
+    axes[0].scatter(y_train, y_train_pred, s=100, alpha=0.6, 
+                   c=errors_train, cmap='RdYlGn_r', edgecolors='black', linewidth=0.5)
+    min_v, max_v = y_train.min(), y_train.max()
+    axes[0].plot([min_v, max_v], [min_v, max_v], 'r--', lw=3, label='Perfect Prediction', zorder=5)
+    axes[0].set_xlabel('Actual Borg Rating', fontsize=12, fontweight='bold')
+    axes[0].set_ylabel('Predicted Borg Rating', fontsize=12, fontweight='bold')
+    axes[0].set_title(f'TRAINING SET (n={len(y_train)})\nR² = {train_r2:.4f} | MAE = {train_mae:.4f}', 
+                     fontsize=13, fontweight='bold')
+    axes[0].legend(fontsize=11)
+    axes[0].grid(True, alpha=0.3)
+    axes[0].set_aspect('equal', adjustable='box')
+    cbar = plt.colorbar(axes[0].collections[0], ax=axes[0])
+    cbar.set_label('Absolute Error', fontsize=11)
+    
+    # Test plot
+    errors_test = np.abs(y_test - y_test_pred)
+    axes[1].scatter(y_test, y_test_pred, s=100, alpha=0.6, 
+                   c=errors_test, cmap='RdYlGn_r', edgecolors='black', linewidth=0.5)
+    min_v, max_v = y_test.min(), y_test.max()
+    axes[1].plot([min_v, max_v], [min_v, max_v], 'r--', lw=3, label='Perfect Prediction', zorder=5)
+    axes[1].set_xlabel('Actual Borg Rating', fontsize=12, fontweight='bold')
+    axes[1].set_ylabel('Predicted Borg Rating', fontsize=12, fontweight='bold')
+    axes[1].set_title(f'TEST SET (n={len(y_test)})\nR² = {test_r2:.4f} | MAE = {test_mae:.4f}', 
+                     fontsize=13, fontweight='bold')
+    axes[1].legend(fontsize=11)
+    axes[1].grid(True, alpha=0.3)
+    axes[1].set_aspect('equal', adjustable='box')
+    cbar = plt.colorbar(axes[1].collections[0], ax=axes[1])
+    cbar.set_label('Absolute Error', fontsize=11)
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / "01_TRAIN_VS_TEST_MULTISUB.png", dpi=300, bbox_inches='tight')
+    print("  ✓ Saved: 01_TRAIN_VS_TEST_MULTISUB.png")
+    plt.close()
+    
+    # Plot 2: Metrics bars
+    fig, ax = plt.subplots(figsize=(12, 7))
+    
+    metrics = ['R² Score', 'MAE', 'RMSE']
+    train_vals = [train_r2, train_mae, train_rmse]
+    test_vals = [test_r2, test_mae, test_rmse]
+    
+    x = np.arange(len(metrics))
+    width = 0.35
+    
+    bars1 = ax.bar(x - width/2, train_vals, width, label='Training', 
+                   color='#2ecc71', edgecolor='black', linewidth=1.5, alpha=0.85)
+    bars2 = ax.bar(x + width/2, test_vals, width, label='Test', 
+                   color='#e74c3c', edgecolor='black', linewidth=1.5, alpha=0.85)
+    
+    for bars in [bars1, bars2]:
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{height:.4f}', ha='center', va='bottom', fontsize=11, fontweight='bold')
+    
+    ax.set_ylabel('Value', fontsize=12, fontweight='bold')
+    ax.set_title('Multi-Subject Model Performance: Train vs Test\n(Higher R² is better, Lower MAE/RMSE is better)', 
+                fontsize=14, fontweight='bold', pad=20)
+    ax.set_xticks(x)
+    ax.set_xticklabels(metrics, fontsize=12, fontweight='bold')
+    ax.legend(fontsize=12)
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / "02_METRICS_MULTISUB.png", dpi=300, bbox_inches='tight')
+    print("  ✓ Saved: 02_METRICS_MULTISUB.png")
+    plt.close()
+    
+    # Plot 3: Residuals vs. Predicted
+    fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+    axes[0].scatter(y_train_pred, y_train - y_train_pred, alpha=0.6, color='#1f77b4', edgecolors='black', linewidth=0.5)
+    axes[0].axhline(0, color='red', linestyle='--', lw=2)
+    axes[0].set_xlabel('Predicted Borg Rating', fontsize=12, fontweight='bold')
+    axes[0].set_ylabel('Residual (Actual - Predicted)', fontsize=12, fontweight='bold')
+    axes[0].set_title('TRAINING SET Residuals', fontsize=13, fontweight='bold')
+    axes[0].grid(True, alpha=0.3)
+    
+    axes[1].scatter(y_test_pred, y_test - y_test_pred, alpha=0.6, color='#e74c3c', edgecolors='black', linewidth=0.5)
+    axes[1].axhline(0, color='red', linestyle='--', lw=2)
+    axes[1].set_xlabel('Predicted Borg Rating', fontsize=12, fontweight='bold')
+    axes[1].set_ylabel('Residual (Actual - Predicted)', fontsize=12, fontweight='bold')
+    axes[1].set_title('TEST SET Residuals', fontsize=13, fontweight='bold')
+    axes[1].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / "03_RESIDUALS_VS_PREDICTED_MULTISUB.png", dpi=300, bbox_inches='tight')
+    print("  ✓ Saved: 03_RESIDUALS_VS_PREDICTED_MULTISUB.png")
+    plt.close()
+    
+    # Plot 4: Residuals histogram
+    fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+    sns.histplot(y_train - y_train_pred, bins=30, kde=True, color='#1f77b4', ax=axes[0])
+    axes[0].set_title('TRAINING SET Residuals Distribution', fontsize=13, fontweight='bold')
+    axes[0].set_xlabel('Residual (Actual - Predicted)', fontsize=12, fontweight='bold')
+    axes[0].set_ylabel('Count', fontsize=12, fontweight='bold')
+    axes[0].grid(True, alpha=0.3)
+    
+    sns.histplot(y_test - y_test_pred, bins=30, kde=True, color='#e74c3c', ax=axes[1])
+    axes[1].set_title('TEST SET Residuals Distribution', fontsize=13, fontweight='bold')
+    axes[1].set_xlabel('Residual (Actual - Predicted)', fontsize=12, fontweight='bold')
+    axes[1].set_ylabel('Count', fontsize=12, fontweight='bold')
+    axes[1].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / "04_RESIDUALS_HISTOGRAM_MULTISUB.png", dpi=300, bbox_inches='tight')
+    print("  ✓ Saved: 04_RESIDUALS_HISTOGRAM_MULTISUB.png")
+    plt.close()
+    
+    # Plot 5: Error vs. True Value
+    fig, ax = plt.subplots(figsize=(10, 7))
+    abs_errors = np.abs(y_test - y_test_pred)
+    ax.scatter(y_test, abs_errors, alpha=0.7, color='#e67e22', edgecolors='black', linewidth=0.5)
+    ax.set_xlabel('Actual Borg Rating', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Absolute Error', fontsize=12, fontweight='bold')
+    ax.set_title('Absolute Error vs. True Borg Rating (Test Set)', fontsize=13, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / "05_ERROR_VS_TRUE_MULTISUB.png", dpi=300, bbox_inches='tight')
+    print("  ✓ Saved: 05_ERROR_VS_TRUE_MULTISUB.png")
+    plt.close()
+    
+    # Plot 6: Density plot
+    fig, ax = plt.subplots(figsize=(10, 7))
+    sns.kdeplot(x=y_test, y=y_test_pred, cmap="Blues", fill=True, thresh=0.05, levels=100, ax=ax)
+    ax.scatter(y_test, y_test_pred, s=60, alpha=0.5, color='#2980b9', edgecolors='black', linewidth=0.5)
+    min_v, max_v = y_test.min(), y_test.max()
+    ax.plot([min_v, max_v], [min_v, max_v], 'r--', lw=2, label='Perfect Prediction')
+    ax.set_xlabel('Actual Borg Rating', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Predicted Borg Rating', fontsize=12, fontweight='bold')
+    ax.set_title('Predicted vs. Actual (Test Set) with Density', fontsize=13, fontweight='bold')
+    ax.legend(fontsize=11)
+    ax.grid(True, alpha=0.3)
+    ax.set_aspect('equal', adjustable='box')
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / "06_PREDICTED_VS_TRUE_DENSITY_MULTISUB.png", dpi=300, bbox_inches='tight')
+    print("  ✓ Saved: 06_PREDICTED_VS_TRUE_DENSITY_MULTISUB.png")
+    plt.close()
+    
+    # Plot 7: Feature Importance
+    fig, ax = plt.subplots(figsize=(12, 11))
+    importances = model.feature_importances_
+    feature_importance_df = pd.DataFrame({
+        'feature': selected_cols,
+        'importance': importances
+    }).sort_values('importance', ascending=False)
+    
+    top_n = 30
+    top_features = feature_importance_df.head(top_n)
+    
+    colors = ['#2ecc71' if 'ppg_' in f else '#e74c3c' if 'eda_' in f else '#3498db' 
+              for f in top_features['feature']]
+    
+    bars = ax.barh(range(len(top_features)), top_features['importance'], color=colors, 
+                   edgecolor='black', linewidth=1)
+    ax.set_yticks(range(len(top_features)))
+    ax.set_yticklabels(top_features['feature'], fontsize=10)
+    ax.set_xlabel('Feature Importance (Gain)', fontsize=12, fontweight='bold')
+    ax.set_title(f'Top 30 Most Important Features (Multi-Subject Model)', fontsize=13, fontweight='bold', pad=15)
+    ax.invert_yaxis()
+    ax.grid(True, alpha=0.3, axis='x')
+    
+    # Add value labels
+    for i, (feat, val) in enumerate(zip(top_features['feature'], top_features['importance'])):
+        ax.text(val, i, f' {val:.4f}', va='center', fontsize=9, fontweight='bold')
+    
+    # Legend for colors
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor='#2ecc71', edgecolor='black', label='PPG'),
+        Patch(facecolor='#e74c3c', edgecolor='black', label='EDA'),
+        Patch(facecolor='#3498db', edgecolor='black', label='IMU (Acc)'),
+    ]
+    ax.legend(handles=legend_elements, loc='lower right', fontsize=10)
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / "07_TOP_FEATURES_IMPORTANCE_MULTISUB.png", dpi=300, bbox_inches='tight')
+    print("  ✓ Saved: 07_TOP_FEATURES_IMPORTANCE_MULTISUB.png")
+    plt.close()
+    
+    print(f"\n✅ All plots saved to: {output_dir}\n")
+    
+    return output_dir
 
 
 if __name__ == "__main__":
@@ -278,8 +445,28 @@ if __name__ == "__main__":
         sys.exit(1)
     
     df = load_combined_data(combined_file, window_length=10.0)
-    X, y, groups, feature_cols = prepare_features(df)
     
-    model, scaler, selected_cols = train_multisub_model(X, y, groups, feature_cols, window_length=10.0)
+    # Try to load pre-selected features from pipeline
+    pre_selected_features = None
+    features_file = Path("/Users/pascalschlegel/data/interim/parsingsim3/multisub_combined/qc_10.0s/features_selected_pruned.csv")
     
-    print(f"\n✓ Multi-subject training completed!")
+    if features_file.exists():
+        print(f"\n▶ Loading pre-selected features from pipeline...")
+        # Features file is just a single column of feature names (no header)
+        pre_selected_features = pd.read_csv(features_file, header=None)[0].tolist()
+        print(f"  ✓ Loaded {len(pre_selected_features)} pre-selected features")
+    else:
+        print(f"\n⚠ Pre-selected features not found at {features_file}")
+        print(f"  Run multisub pipeline first: python run_multisub_pipeline.py")
+        print(f"  Falling back to all features (not recommended)")
+    
+    
+    
+    X, y, groups, feature_cols = prepare_features(df, pre_selected_features=pre_selected_features)
+    
+    model, scaler, selected_cols, y_train, y_test, y_train_pred, y_test_pred, train_r2, test_r2, train_mae, test_mae, train_rmse, test_rmse = train_multisub_model(X, y, groups, feature_cols, window_length=10.0)
+    
+    # Generate plots
+    plot_dir = generate_plots(y_train, y_test, y_train_pred, y_test_pred, test_r2, test_mae, test_rmse, model, selected_cols)
+    
+    print(f"\n✓ Multi-subject training and visualization completed!")

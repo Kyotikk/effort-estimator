@@ -1,10 +1,10 @@
 feature,reason,value
-ppg_infra_tke_mean_abs,|corr|>=0.95,1.0
-ppg_infra_diff_mean,|corr|>=0.95,1.0
-ppg_infra_signal_rms,|corr|>=0.95,1.0
+ppg_infra_dx_mean,|corr|>=0.95,1.0
+ppg_infra_tke_mean,|corr|>=0.95,1.0
+ppg_infra_rms,|corr|>=0.95,1.0
 ppg_infra_dx_std,|corr|>=0.95,1.0
 ppg_infra_diff_rms,|corr|>=0.95,0.9999999575562131
-ppg_infra_rms,|corr|>=0.95,0.9999993001522451
+ppg_infra_signal_rms,|corr|>=0.95,0.9999993001522451
 ppg_infra_mad,|corr|>=0.95,0.9985705712315391
 ppg_infra_mean_abs,|corr|>=0.95,0.993759605877715
 ppg_infra_p95_p5,|corr|>=0.95,0.9934815906734202
@@ -21,4 +21,4 @@ ppg_infra_tke_p95_abs,|corr|>=0.95,0.9782228243607112
 ppg_infra_mean_cross_rate,|corr|>=0.95,0.9777102541142855
 ppg_infra_p95,|corr|>=0.95,0.9715961917084045
 ppg_infra_ddx_std,|corr|>=0.95,0.9621308712717295
-ppg_infra_tke_mean,|corr|>=0.95,0.9514542662515039
+ppg_infra_tke_mean_abs,|corr|>=0.95,0.9514542662515039

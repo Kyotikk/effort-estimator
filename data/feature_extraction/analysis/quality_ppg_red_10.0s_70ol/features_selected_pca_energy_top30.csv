@@ -4,7 +4,7 @@ ppg_red_ddx_kurtosis
 ppg_red_signal_energy
 ppg_red_shape_factor
 ppg_red_kurtosis
-ppg_red_tke_mean_abs
+ppg_red_tke_mean
 ppg_red_max
 ppg_red_min
 ppg_red_mad

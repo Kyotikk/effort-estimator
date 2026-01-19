@@ -2,7 +2,7 @@ PC,feature,abs_loading
 PC1,ppg_red_max,0.3209274614601902
 PC1,ppg_red_min,0.3185791591741741
 PC1,ppg_red_ddx_std,0.31010236512622014
-PC1,ppg_red_tke_mean_abs,0.2738223982716974
+PC1,ppg_red_tke_mean,0.2738223982716974
 PC1,ppg_red_signal_energy,0.2725948179438538
 PC1,ppg_red_tke_std,0.26967193732013006
 PC1,ppg_red_crest_factor,0.2696593108754546
@@ -11,7 +11,7 @@ PC2,ppg_red_kurtosis,0.3431062805543098
 PC2,ppg_red_shape_factor,0.3321122809973144
 PC2,ppg_red_impulse_factor,0.3305927910837345
 PC2,ppg_red_clearance_factor,0.3173006545905669
-PC2,ppg_red_tke_mean_abs,0.28451382557174604
+PC2,ppg_red_tke_mean,0.28451382557174604
 PC2,ppg_red_mad,0.27547198216977625
 PC2,ppg_red_signal_energy,0.27460782656934524
 PC2,ppg_red_crest_factor,0.2513545140500172

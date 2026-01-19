@@ -13,6 +13,7 @@ import yaml
 from pathlib import Path
 import pandas as pd
 import numpy as np
+from ml.feature_selection_and_qc import select_and_prune_features, perform_pca_analysis, save_feature_selection_results
 
 DATA_ROOT = "/Users/pascalschlegel/data/interim/parsingsim3"
 SUBJECTS = ["sim_elderly3", "sim_healthy3", "sim_severe3"]
@@ -381,6 +382,61 @@ def main():
     combined.to_csv(combined_file, index=False)
     print(f"\n✓ Saved combined dataset: {combined_file}")
     
+    # Run feature selection on combined dataset
+    print(f"\n{'='*70}")
+    print(f"FEATURE SELECTION + QC")
+    print(f"{'='*70}")
+    
+    df_labeled = combined.dropna(subset=["borg"]).copy()
+    
+    # Remove metadata columns
+    skip_cols = {
+        "window_id", "start_idx", "end_idx", "valid",
+        "t_start", "t_center", "t_end", "n_samples", "win_sec",
+        "modality", "subject", "borg",
+    }
+    
+    def is_metadata(col):
+        if col in skip_cols:
+            return True
+        if col.endswith("_r") or any(col.endswith(f"_r.{i}") for i in range(1, 10)):
+            return True
+        return False
+    
+    feature_cols = [col for col in df_labeled.columns if not is_metadata(col)]
+    X = df_labeled[feature_cols].values
+    y = df_labeled["borg"].values
+    
+    print(f"  ✓ {len(feature_cols)} features (after metadata removal)")
+    print(f"  ✓ {len(df_labeled)} labeled samples for feature selection")
+    
+    # Feature selection + pruning
+    print(f"\n  Selecting top 100 features by correlation...")
+    pruned_indices, pruned_cols = select_and_prune_features(
+        X, y, feature_cols, 
+        corr_threshold=0.90, 
+        top_n=100
+    )
+    
+    # PCA analysis
+    X_pruned = X[:, pruned_indices]
+    explained_df, loadings_df, top_loadings_df, pcs_for_targets = perform_pca_analysis(
+        X_pruned, pruned_cols
+    )
+    
+    # Save feature selection outputs
+    feature_qc_dir = output_path / f"qc_{WINDOW_LENGTH:.1f}s"
+    save_feature_selection_results(
+        str(feature_qc_dir), 
+        pruned_cols, 
+        explained_df, 
+        loadings_df, 
+        top_loadings_df
+    )
+    
+    print(f"  ✓ Feature selection complete: {len(pruned_cols)} features selected")
+    print(f"  ✓ QC outputs saved to {feature_qc_dir}")
+    
     # Summary stats
     print(f"\n{'='*70}")
     print(f"SUMMARY")
@@ -391,7 +447,8 @@ def main():
         print(f"  {subject}: {n_samples} samples ({n_labeled} labeled)")
     
     print(f"\nTotal: {len(combined)} samples ({combined['borg'].notna().sum()} labeled)")
-    print(f"Features: {len(combined.columns)}")
+    print(f"Features before selection: {len(feature_cols)}")
+    print(f"Features after selection: {len(pruned_cols)}")
     
     return 0
 

@@ -30,9 +30,9 @@ PC4,ppg_green_dx_kurtosis,0.31302392020797754
 PC4,ppg_green_ddx_std,0.21623093798620874
 PC4,ppg_green_tke_std,0.2151997498630434
 PC4,ppg_green_tke_p95_abs,0.21112632093085715
-PC4,ppg_green_dx_mean,0.19422304652404213
+PC4,ppg_green_diff_mean,0.19422304652404213
 PC5,ppg_green_ddx_mean,0.6841002543493787
-PC5,ppg_green_dx_mean,0.6561772685400263
+PC5,ppg_green_diff_mean,0.6561772685400263
 PC5,ppg_green_skew,0.180479294519018
 PC5,ppg_green_mean_cross_rate,0.16544573465802495
 PC5,ppg_green_tke_std,0.12739101922513468
@@ -40,7 +40,7 @@ PC5,ppg_green_kurtosis,0.09443408315137762
 PC5,ppg_green_clearance_factor,0.06952773712555779
 PC5,ppg_green_tke_p95_abs,0.0688625901312155
 PC6,ppg_green_ddx_mean,0.6949499101519506
-PC6,ppg_green_dx_mean,0.6851686843702431
+PC6,ppg_green_diff_mean,0.6851686843702431
 PC6,ppg_green_skew,0.16581418312795462
 PC6,ppg_green_min,0.0803012524222489
 PC6,ppg_green_kurtosis,0.0735781321595041
@@ -60,6 +60,6 @@ PC8,ppg_green_skew,0.4623111945213019
 PC8,ppg_green_ddx_std,0.3952192709475118
 PC8,ppg_green_kurtosis,0.379749149521443
 PC8,ppg_green_ddx_kurtosis,0.23414561939525488
-PC8,ppg_green_dx_mean,0.2193009862232192
+PC8,ppg_green_diff_mean,0.2193009862232192
 PC8,ppg_green_mean_cross_rate,0.21773749150154945
 PC8,ppg_green_ddx_mean,0.15675463940525933

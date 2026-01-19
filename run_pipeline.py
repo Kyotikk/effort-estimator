@@ -17,6 +17,7 @@ from features.manual_features_imu import compute_top_imu_features_from_windows
 
 from ml.targets.run_target_alignment import run_alignment
 from ml.run_fusion import main as run_fusion
+from ml.feature_selection_and_qc import main as run_feature_selection
 
 
 def load_config(path: str) -> dict:
@@ -389,29 +390,49 @@ def run_pipeline(config_path: str) -> None:
                     )
 
         # ---------- FUSION ----------
-        print("\n▶ Fusion step (if applicable)")
+        print("\n▶ Fusion step")
         if cfg.get("fusion", None) is not None:
+            print("  Running fusion...")
             run_fusion(config_path=config_path)
-
-            # ---------- FUSED FEATURES ALIGNMENT ----------
-            print("\n▶ Aligning fused features with Borg effort labels")
-            adl_path = cfg["targets"]["imu"]["adl_path"]
+            print("  ✓ Fusion complete")
+        else:
+            print("  (Fusion not configured in config)")
+        
+        # ---------- FUSED FEATURES ALIGNMENT ----------
+        print("\n▶ Aligning fused features with Borg effort labels")
+        adl_path = cfg["targets"]["imu"]["adl_path"]
+        
+        for win_sec in win_lengths:
+            win_sec = float(win_sec)
             
-            for win_sec in win_lengths:
-                win_sec = float(win_sec)
-                
-                fused_feat_path = ds_out / f"fused_features_{win_sec:.1f}s.csv"
-                imu_win_path = ds_out / "imu_bioz" / f"imu_windows_{win_sec:.1f}s.csv"
-                fused_aligned_path = ds_out / f"fused_aligned_{win_sec:.1f}s.csv"
-                
-                if fused_feat_path.exists() and not fused_aligned_path.exists():
-                    print(f"  Aligning fused features ({win_sec:.1f}s windows)...")
-                    run_alignment(
+            fused_feat_path = ds_out / f"fused_features_{win_sec:.1f}s.csv"
+            imu_win_path = ds_out / "imu_bioz" / f"imu_windows_{win_sec:.1f}s.csv"
+            fused_aligned_path = ds_out / f"fused_aligned_{win_sec:.1f}s.csv"
+            
+            if fused_feat_path.exists() and not fused_aligned_path.exists():
+                print(f"  Aligning fused features ({win_sec:.1f}s windows)...")
+                run_alignment(
                         features_path=str(fused_feat_path),
                         windows_path=str(imu_win_path),
                         adl_path=adl_path,
                         out_path=str(fused_aligned_path),
                     )
+        
+        # ---------- FEATURE SELECTION + QC ----------
+        print("\n▶ Feature selection with correlation pruning + quality checks")
+        for win_sec in win_lengths:
+            win_sec = float(win_sec)
+            fused_aligned_path = ds_out / f"fused_aligned_{win_sec:.1f}s.csv"
+            feature_qc_dir = ds_out / "feature_selection_qc" / f"qc_{win_sec:.1f}s"
+            
+            if fused_aligned_path.exists():
+                print(f"  Running feature selection ({win_sec:.1f}s windows)...")
+                run_feature_selection(
+                    fused_aligned_path=str(fused_aligned_path),
+                    output_dir=str(feature_qc_dir),
+                    win_sec=win_sec
+                )
+                print(f"  ✓ Feature selection complete ({win_sec:.1f}s)")
 
 
 if __name__ == "__main__":
