@@ -26,10 +26,12 @@ This pipeline estimates physical effort (Borg scale 0-10) from wearable sensor d
 - **RR Intervals**: @ 1Hz
   - Heart rate variability from respiration
 
-### Ground Truth Labels
-- **Borg RPE Scale** (0-10): Perceived physical effort
+### Ground Truth Labels (UPDATED: Now Using HRV Recovery Rate)
+- **Borg RPE Scale** (0-10): Perceived physical effort (baseline for validation)
+- **HRV Recovery Rate** (ms/s): Physiological effort indicator (primary target)
 - Collected during Activities of Daily Living (ADLs)
 - Manually annotated Start/End timestamps with effort ratings
+- **Recovery phases**: 5 minutes post-activity used to compute autonomic recovery speed
 
 ---
 

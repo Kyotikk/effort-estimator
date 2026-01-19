@@ -171,7 +171,19 @@ def main(fused_aligned_path, output_dir, win_sec=10.0):
     # Load data
     print(f"\n📂 Loading data from: {fused_aligned_path}")
     df = pd.read_csv(fused_aligned_path)
-    df_labeled = df.dropna(subset=["borg"]).copy()
+    
+    # Determine target variable (HRV recovery rate if available, else Borg)
+    target_col = None
+    if 'hrv_recovery_rate' in df.columns:
+        target_col = 'hrv_recovery_rate'
+        print("  ✓ Using HRV Recovery Rate as target variable (primary)")
+    elif 'borg' in df.columns:
+        target_col = 'borg'
+        print("  ✓ Using Borg RPE Scale as target variable (fallback)")
+    else:
+        raise ValueError("No target variable found (need 'hrv_recovery_rate' or 'borg')")
+    
+    df_labeled = df.dropna(subset=[target_col]).copy()
     print(f"  ✓ Loaded {len(df_labeled)} labeled samples")
     
     # Filter metadata
@@ -179,6 +191,7 @@ def main(fused_aligned_path, output_dir, win_sec=10.0):
         "window_id", "start_idx", "end_idx", "valid",
         "t_start", "t_center", "t_end", "n_samples", "win_sec",
         "modality", "subject", "borg",
+        "hrv_recovery_rate", "hrv_baseline", "hrv_effort", "hrv_recovery", "activity_borg"
     }
     
     def is_metadata(col):
@@ -190,7 +203,7 @@ def main(fused_aligned_path, output_dir, win_sec=10.0):
     
     feature_cols = [col for col in df_labeled.columns if not is_metadata(col)]
     X = df_labeled[feature_cols].values
-    y = df_labeled["borg"].values
+    y = df_labeled[target_col].values
     print(f"  ✓ {len(feature_cols)} features (after metadata removal)")
     
     # Train-test split

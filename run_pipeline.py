@@ -15,6 +15,7 @@ from phases.phase2_windowing.windows import create_windows
 from phases.phase3_features.manual_features_imu import compute_top_imu_features_from_windows
 
 from phases.phase5_alignment.run_target_alignment import run_alignment
+from phases.phase5_alignment.compute_hrv_recovery import align_windows_to_hrv_recovery
 from phases.phase4_fusion.run_fusion import main as run_fusion
 from phases.phase6_feature_selection.feature_selection_and_qc import main as run_feature_selection
 
@@ -372,8 +373,8 @@ def run_pipeline(config_path: str) -> None:
         else:
             print("  (Fusion not configured in config)")
         
-        # ---------- FUSED FEATURES ALIGNMENT ----------
-        print("\n▶ Aligning fused features with Borg effort labels")
+        # ---------- FUSED FEATURES ALIGNMENT WITH HRV RECOVERY ----------
+        print("\n▶ Aligning fused features with HRV Recovery Rate labels")
         adl_path = cfg["targets"]["imu"]["adl_path"]
         
         for win_sec in win_lengths:
@@ -381,11 +382,38 @@ def run_pipeline(config_path: str) -> None:
             
             fused_feat_path = ds_out / f"fused_features_{win_sec:.1f}s.csv"
             imu_win_path = ds_out / "imu_bioz" / f"imu_windows_{win_sec:.1f}s.csv"
+            ppg_clean_path = ds_out / "ppg_green" / "ppg_green_preprocessed.csv"  # Use green PPG for HRV
             fused_aligned_path = ds_out / f"fused_aligned_{win_sec:.1f}s.csv"
             
             if fused_feat_path.exists() and not fused_aligned_path.exists():
-                print(f"  Aligning fused features ({win_sec:.1f}s windows)...")
-                run_alignment(
+                print(f"  Computing HRV recovery rates and aligning fused features ({win_sec:.1f}s windows)...")
+                try:
+                    # Align windows to HRV recovery rates from PPG data
+                    windows_df = pd.read_csv(imu_win_path)
+                    ppg_df = pd.read_csv(ppg_clean_path)
+                    adl_df = pd.read_csv(adl_path)
+                    
+                    aligned_df = align_windows_to_hrv_recovery(
+                        windows_df=windows_df,
+                        ppg_df=ppg_df,
+                        adl_df=adl_df,
+                        fs=32  # PPG sampling frequency
+                    )
+                    
+                    # Merge HRV recovery labels with fused features
+                    fused_df = pd.read_csv(fused_feat_path)
+                    merged_df = fused_df.merge(
+                        aligned_df[['window_id', 'hrv_recovery_rate', 'hrv_baseline', 'hrv_effort', 'hrv_recovery', 'activity_borg']],
+                        on='window_id',
+                        how='inner'  # Only keep windows with HRV labels
+                    )
+                    merged_df.to_csv(fused_aligned_path, index=False)
+                    print(f"  ✓ HRV alignment complete. {len(merged_df)} windows with recovery rates")
+                except Exception as e:
+                    print(f"  ⚠ HRV recovery computation failed: {e}")
+                    print(f"  Falling back to Borg labels...")
+                    # Fallback to old Borg-based alignment
+                    run_alignment(
                         features_path=str(fused_feat_path),
                         windows_path=str(imu_win_path),
                         adl_path=adl_path,

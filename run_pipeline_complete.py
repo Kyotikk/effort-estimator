@@ -330,7 +330,9 @@ def combine_datasets(subjects, window_length):
     
     combined = pd.concat(dfs, ignore_index=True)
     print(f"\n✓ Combined: {len(combined)} total samples")
-    print(f"  Labeled: {combined['borg'].notna().sum()}")
+    # Check which target variable is available
+    target_col = 'hrv_recovery_rate' if 'hrv_recovery_rate' in combined.columns else 'borg'
+    print(f"  Labeled: {combined[target_col].notna().sum()} (using {target_col})")
     
     return combined
 
@@ -385,13 +387,18 @@ def main():
     print(f"FEATURE SELECTION + QC")
     print(f"{'='*70}")
     
-    df_labeled = combined.dropna(subset=["borg"]).copy()
+    # Determine target variable (HRV recovery rate if available, else Borg)
+    target_col = 'hrv_recovery_rate' if 'hrv_recovery_rate' in combined.columns else 'borg'
+    print(f"  Using target variable: {target_col}")
+    
+    df_labeled = combined.dropna(subset=[target_col]).copy()
     
     # Remove metadata columns
     skip_cols = {
         "window_id", "start_idx", "end_idx", "valid",
         "t_start", "t_center", "t_end", "n_samples", "win_sec",
         "modality", "subject", "borg",
+        "hrv_recovery_rate", "hrv_baseline", "hrv_effort", "hrv_recovery", "activity_borg"
     }
     
     def is_metadata(col):
@@ -403,7 +410,7 @@ def main():
     
     feature_cols = [col for col in df_labeled.columns if not is_metadata(col)]
     X = df_labeled[feature_cols].values
-    y = df_labeled["borg"].values
+    y = df_labeled[target_col].values
     
     print(f"  ✓ {len(feature_cols)} features (after metadata removal)")
     print(f"  ✓ {len(df_labeled)} labeled samples for feature selection")
@@ -439,12 +446,16 @@ def main():
     print(f"\n{'='*70}")
     print(f"SUMMARY")
     print(f"{'='*70}")
+    
+    # Determine which target was used for display
+    target_col = 'hrv_recovery_rate' if 'hrv_recovery_rate' in combined.columns else 'borg'
+    
     for subject in succeeded:
         n_samples = len(combined[combined["subject"] == subject])
-        n_labeled = combined[combined["subject"] == subject]["borg"].notna().sum()
+        n_labeled = combined[combined["subject"] == subject][target_col].notna().sum()
         print(f"  {subject}: {n_samples} samples ({n_labeled} labeled)")
     
-    print(f"\nTotal: {len(combined)} samples ({combined['borg'].notna().sum()} labeled)")
+    print(f"\nTotal: {len(combined)} samples ({combined[target_col].notna().sum()} labeled)")
     print(f"Features before selection: {len(feature_cols)}")
     print(f"Features after selection: {len(pruned_cols)}")
     
