@@ -1,7 +1,7 @@
 feature,reason,value
-ppg_infra_dx_mean,|corr|>=0.95,1.0
-ppg_infra_tke_mean,|corr|>=0.95,1.0
 ppg_infra_rms,|corr|>=0.95,1.0
+ppg_infra_diff_mean,|corr|>=0.95,1.0
+ppg_infra_tke_mean,|corr|>=0.95,1.0
 ppg_infra_dx_std,|corr|>=0.95,1.0
 ppg_infra_diff_rms,|corr|>=0.95,0.9999999575562131
 ppg_infra_signal_rms,|corr|>=0.95,0.9999993001522451

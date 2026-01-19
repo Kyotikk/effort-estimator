@@ -2,7 +2,7 @@ ppg_red_ddx_kurtosis
 ppg_red_p90
 ppg_red_mad
 ppg_red_p10
-ppg_red_tke_mean
+ppg_red_tke_mean_abs
 ppg_red_tke_std
 ppg_red_crest_factor
 ppg_red_signal_energy
