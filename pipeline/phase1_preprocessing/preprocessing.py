@@ -63,7 +63,7 @@ def _normalize_time(df: pd.DataFrame, time_col: str = "time") -> pd.DataFrame:
 # IMU PREPROCESSING (bioz & wrist)
 # ============================================================================
 
-def preprocess_imu(path: str, fs: float = 125.0, lowcut: float = 0.5, highcut: float = 50.0) -> pd.DataFrame:
+def preprocess_imu(path: str, fs: float = 125.0, lowcut: float = 0.5, highcut: float = None) -> pd.DataFrame:
     """
     Preprocess IMU signal (accelerometer).
     
@@ -71,11 +71,14 @@ def preprocess_imu(path: str, fs: float = 125.0, lowcut: float = 0.5, highcut: f
         path: Path to raw IMU CSV/CSV.gz (columns: time, accX, accY, accZ)
         fs: Sampling frequency (Hz)
         lowcut: Band-pass lower cutoff (Hz)
-        highcut: Band-pass upper cutoff (Hz)
+        highcut: Band-pass upper cutoff (Hz). If None, uses fs/2.5 (safe default)
     
     Returns:
         DataFrame with t_unix, t_sec, acc_x, acc_y, acc_z (filtered)
     """
+    if highcut is None:
+        highcut = fs / 2.5  # Safe default: well below Nyquist
+    
     df = _load_raw_csv(path, ["time", "accX", "accY", "accZ"])
     df = df[["time", "accX", "accY", "accZ"]].copy()
     
@@ -106,25 +109,26 @@ def preprocess_imu(path: str, fs: float = 125.0, lowcut: float = 0.5, highcut: f
 # PPG PREPROCESSING (green, infra, red)
 # ============================================================================
 
-def preprocess_ppg(path: str, fs: float = 32.0, lowcut: float = 0.4, highcut: float = 5.0) -> pd.DataFrame:
+def preprocess_ppg(path: str, fs: float = 32.0, signal_col: str = "value", lowcut: float = 0.4, highcut: float = 5.0) -> pd.DataFrame:
     """
     Preprocess PPG signal.
     
     Args:
-        path: Path to raw PPG CSV/CSV.gz (columns: time, value)
+        path: Path to raw PPG CSV/CSV.gz (columns: time, signal_col)
         fs: Sampling frequency (Hz)
+        signal_col: Name of the PPG signal column (default: "value")
         lowcut: Band-pass lower cutoff (Hz)
         highcut: Band-pass upper cutoff (Hz)
     
     Returns:
         DataFrame with t_unix, t_sec, ppg_signal
     """
-    df = _load_raw_csv(path, ["time", "value"])
-    df = df[["time", "value"]].copy()
+    df = _load_raw_csv(path, ["time", signal_col])
+    df = df[["time", signal_col]].copy()
     
     df = _normalize_time(df)
     
-    df["ppg_signal"] = pd.to_numeric(df["value"], errors="coerce").astype(float)
+    df["ppg_signal"] = pd.to_numeric(df[signal_col], errors="coerce").astype(float)
     df = df.dropna(subset=["ppg_signal"])
     
     # Apply band-pass filter
@@ -137,25 +141,26 @@ def preprocess_ppg(path: str, fs: float = 32.0, lowcut: float = 0.4, highcut: fl
 # EDA PREPROCESSING
 # ============================================================================
 
-def preprocess_eda(path: str, fs: float = 4.0, lowcut: float = 0.05, highcut: float = 1.0) -> pd.DataFrame:
+def preprocess_eda(path: str, fs: float = 32.0, signal_col: str = "cz", lowcut: float = 0.05, highcut: float = 5.0) -> pd.DataFrame:
     """
     Preprocess EDA (electrodermal activity) signal.
     
     Args:
-        path: Path to raw EDA CSV/CSV.gz (columns: time, value)
+        path: Path to raw EDA CSV/CSV.gz (columns: time, signal_col)
         fs: Sampling frequency (Hz)
+        signal_col: Name of the EDA signal column (default: "cz" for skin conductance)
         lowcut: Band-pass lower cutoff (Hz)
         highcut: Band-pass upper cutoff (Hz)
     
     Returns:
         DataFrame with t_unix, t_sec, eda_signal
     """
-    df = _load_raw_csv(path, ["time", "value"])
-    df = df[["time", "value"]].copy()
+    df = _load_raw_csv(path, ["time", signal_col])
+    df = df[["time", signal_col]].copy()
     
     df = _normalize_time(df)
     
-    df["eda_signal"] = pd.to_numeric(df["value"], errors="coerce").astype(float)
+    df["eda_signal"] = pd.to_numeric(df[signal_col], errors="coerce").astype(float)
     df = df.dropna(subset=["eda_signal"])
     
     # Apply band-pass filter
@@ -168,26 +173,28 @@ def preprocess_eda(path: str, fs: float = 4.0, lowcut: float = 0.05, highcut: fl
 # RR PREPROCESSING (Respiration Rate / R-R Interval)
 # ============================================================================
 
-def preprocess_rr(path: str, fs: float = 1.0) -> pd.DataFrame:
+def preprocess_rr(path: str, fs: float = 1.0, signal_col: str = "rr") -> pd.DataFrame:
     """
     Preprocess RR (respiration rate / inter-beat interval) signal.
     
     Args:
-        path: Path to raw RR CSV/CSV.gz (columns: time, value)
+        path: Path to raw RR CSV/CSV.gz (columns: time, signal_col)
         fs: Sampling frequency (Hz) - typically 1 Hz for R-R intervals
+        signal_col: Name of the RR signal column (default: "rr")
     
     Returns:
         DataFrame with t_unix, t_sec, rr_signal
     """
-    df = _load_raw_csv(path, ["time", "value"])
-    df = df[["time", "value"]].copy()
+    df = _load_raw_csv(path, ["time", signal_col])
+    df = df[["time", signal_col]].copy()
     
     df = _normalize_time(df)
     
-    df["rr_signal"] = pd.to_numeric(df["value"], errors="coerce").astype(float)
+    df["rr_signal"] = pd.to_numeric(df[signal_col], errors="coerce").astype(float)
     df = df.dropna(subset=["rr_signal"])
     
-    # RR is typically already clean; light low-pass filter for smoothing
-    df["rr_signal"] = butter_lowpass(df["rr_signal"].values, cutoff=0.5, fs=fs)
+    # RR is typically already clean; apply light low-pass filter if fs > 1 Hz
+    if fs > 1.5:
+        df["rr_signal"] = butter_lowpass(df["rr_signal"].values, cutoff=0.5, fs=fs)
     
     return df[["t_unix", "t_sec", "rr_signal"]]

@@ -51,17 +51,18 @@ def load_config(config_path: str) -> dict:
         return yaml.safe_load(f)
 
 
-def process_single_subject(config: dict, subject: str) -> dict:
+def process_single_subject(config: dict, dataset: dict) -> dict:
     """
     Process a single subject through all 7 phases.
     
     Args:
         config: Pipeline configuration dict
-        subject: Subject name/ID
+        dataset: Dataset configuration dict (single item from datasets list)
     
     Returns:
         Dictionary with results from each phase
     """
+    subject = dataset["name"]
     logger.info(f"\n{'='*60}")
     logger.info(f"Processing subject: {subject}")
     logger.info(f"{'='*60}")
@@ -73,17 +74,14 @@ def process_single_subject(config: dict, subject: str) -> dict:
     # =========================================================================
     logger.info("\n[PHASE 1] Preprocessing - Load & clean raw signals")
     
-    dataset = config["datasets"][subject]
-    fs_config = config["preprocessing"]
-    
     # Preprocess each modality
-    imu_bioz_df = preprocess_imu(dataset["imu_bioz"], fs=fs_config["imu_bioz"]["fs"])
-    imu_wrist_df = preprocess_imu(dataset["imu_wrist"], fs=fs_config["imu_wrist"]["fs"])
-    ppg_green_df = preprocess_ppg(dataset["ppg_green"], fs=fs_config["ppg_green"]["fs"])
-    ppg_infra_df = preprocess_ppg(dataset["ppg_infra"], fs=fs_config["ppg_infra"]["fs"])
-    ppg_red_df = preprocess_ppg(dataset["ppg_red"], fs=fs_config["ppg_red"]["fs"])
-    eda_df = preprocess_eda(dataset["eda"], fs=fs_config["eda"]["fs"])
-    rr_df = preprocess_rr(dataset["rr"], fs=fs_config["rr"]["fs"])
+    imu_bioz_df = preprocess_imu(dataset["imu_bioz"]["path"], fs=dataset["imu_bioz"]["fs_out"])
+    imu_wrist_df = preprocess_imu(dataset["imu_wrist"]["path"], fs=dataset["imu_wrist"]["fs_out"])
+    ppg_green_df = preprocess_ppg(dataset["ppg_green"]["path"], fs=dataset["ppg_green"]["fs_out"])
+    ppg_infra_df = preprocess_ppg(dataset["ppg_infra"]["path"], fs=dataset["ppg_infra"]["fs_out"])
+    ppg_red_df = preprocess_ppg(dataset["ppg_red"]["path"], fs=dataset["ppg_red"]["fs_out"])
+    eda_df = preprocess_eda(dataset["eda"]["path"], fs=dataset["eda"]["fs_out"])
+    rr_df = preprocess_rr(dataset["rr"]["path"], fs=dataset["rr"]["fs_out"])
     
     results["preprocessed"] = {
         "imu_bioz": imu_bioz_df,
@@ -108,7 +106,7 @@ def process_single_subject(config: dict, subject: str) -> dict:
     
     windows_dict = {}
     for modality_name, df in results["preprocessed"].items():
-        fs = config["preprocessing"][modality_name]["fs"]
+        fs = dataset[modality_name]["fs_out"]
         windows_dict[modality_name] = create_windows(
             df,
             fs=fs,
@@ -217,13 +215,21 @@ def main():
     # Load config
     config = load_config(args.config)
     
-    # Process subject(s)
-    subjects = [args.subject] if args.subject else list(config["datasets"].keys())
+    # Get datasets to process
+    datasets = config["datasets"]
+    
+    # Filter by subject name if specified
+    if args.subject:
+        datasets = [ds for ds in datasets if ds["name"] == args.subject]
+        if not datasets:
+            logger.error(f"Subject '{args.subject}' not found in config")
+            return
     
     all_results = {}
-    for subject in subjects:
+    for dataset in datasets:
+        subject = dataset["name"]
         try:
-            results = process_single_subject(config, subject)
+            results = process_single_subject(config, dataset)
             all_results[subject] = results
         except Exception as e:
             logger.error(f"Error processing {subject}: {e}", exc_info=True)

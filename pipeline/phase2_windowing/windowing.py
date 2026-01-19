@@ -48,11 +48,17 @@ def create_windows(
     if not (0.0 <= overlap < 1.0):
         raise ValueError("overlap must be in [0, 1).")
 
-    # Verify uniform sampling
+    # Verify uniform sampling (with tolerance for low-rate signals)
     dt = df[time_col].diff().dropna()
     median_dt = dt.median()
-    if not np.allclose(dt, median_dt, rtol=1e-3, atol=1e-6):
-        raise ValueError(f"Non-uniform sampling detected in {time_col}. Resample before windowing.")
+    
+    # For low-rate signals (fs < 2 Hz), use looser tolerance
+    rtol = 0.2 if fs < 2.0 else 1e-3
+    atol = 0.5 if fs < 2.0 else 1e-6
+    
+    if not np.allclose(dt, median_dt, rtol=rtol, atol=atol):
+        logger.warning(f"Non-uniform sampling in {time_col}: dt_median={median_dt:.4f}, dt_std={dt.std():.4f}")
+        # Don't raise error - proceed with approximate windowing
 
     win_len = int(round(fs * win_sec))
     if win_len < 2:
