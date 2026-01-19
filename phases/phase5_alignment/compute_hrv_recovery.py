@@ -309,3 +309,110 @@ def align_windows_to_hrv_recovery(windows_df, ppg_df, adl_df, fs=32):
         print(f"    Slow recovery (<0.5 ms/s): High effort or fatigued")
     
     return labeled_windows
+
+
+def align_windows_to_hrv_recovery_rr(windows, intervals, rr_path):
+    """
+    Assign HRV recovery rates to windows using pre-extracted RR intervals.
+    
+    This function reads RR intervals from a CSV file and aligns them with
+    windows during recovery phases of ADL activities.
+    
+    Args:
+        windows: DataFrame with columns [window_id, t_start, t_center, t_end]
+        intervals: ADL intervals DataFrame with columns [t_start, t_end, borg, ...]
+        rr_path: Path to CSV with RR intervals (columns: time/t_sec, rr_ms or similar)
+        
+    Returns:
+        windows_labeled: Windows with hrv_recovery_rate column
+    """
+    import pandas as pd
+    from pathlib import Path
+    
+    windows_labeled = windows.copy()
+    
+    # Load RR intervals
+    try:
+        rr_df = pd.read_csv(rr_path)
+    except Exception as e:
+        raise ValueError(f"Cannot load RR intervals from {rr_path}: {e}")
+    
+    # Handle different column name conventions
+    time_col = 'time' if 'time' in rr_df.columns else 't_sec'
+    rr_col = 'rr_ms' if 'rr_ms' in rr_df.columns else ('rr' if 'rr' in rr_df.columns else None)
+    
+    if rr_col is None:
+        raise ValueError(f"RR CSV must have 'rr_ms' or 'rr' column. Found: {list(rr_df.columns)}")
+    
+    # Add hrv_recovery_rate column (initially NaN)
+    windows_labeled['hrv_recovery_rate'] = np.nan
+    
+    data_start = rr_df[time_col].min()
+    data_end = rr_df[time_col].max()
+    
+    # Get RR intervals into a working structure
+    print(f"  RR data loaded: {len(rr_df)} samples from {data_start:.1f} to {data_end:.1f}")
+    
+    # For each ADL activity, compute recovery rate during recovery phase
+    recovery_buffer_sec = 300  # 5 minutes
+    successful_labels = 0
+    
+    for idx, activity in intervals.iterrows():
+        t_start = activity['t_start']
+        t_end = activity['t_end']
+        borg = activity.get('borg', np.nan)
+        
+        # Recovery phase: starts at activity end, lasts recovery_buffer_sec
+        recovery_start = t_end
+        recovery_end = min(t_end + recovery_buffer_sec, data_end)
+        
+        # Skip if recovery phase is too short
+        if recovery_end - recovery_start < 10:
+            continue
+        
+        # Extract RR intervals during recovery phase
+        recovery_rr = rr_df[
+            (rr_df[time_col] >= recovery_start) & 
+            (rr_df[time_col] < recovery_end)
+        ][rr_col].values
+        
+        if len(recovery_rr) < 5:
+            continue
+        
+        # Extract RR intervals during activity
+        activity_rr = rr_df[
+            (rr_df[time_col] >= t_start) & 
+            (rr_df[time_col] < t_end)
+        ][rr_col].values
+        
+        if len(activity_rr) < 5:
+            continue
+        
+        # Compute HRV for each phase
+        hrv_activity = compute_hrv_window(activity_rr)
+        hrv_recovery = compute_hrv_window(recovery_rr)
+        
+        # Recovery rate: how fast HRV changes per second
+        hrv_change = hrv_recovery - hrv_activity  # ms
+        recovery_time_sec = (recovery_end - recovery_start)  # seconds
+        hrv_recovery_rate = hrv_change / recovery_time_sec
+        
+        # Assign to windows in recovery phase
+        recovery_mask = (
+            (windows_labeled['t_center'] >= recovery_start) &
+            (windows_labeled['t_center'] <= recovery_end)
+        )
+        
+        n_assigned = recovery_mask.sum()
+        if n_assigned > 0:
+            windows_labeled.loc[recovery_mask, 'hrv_recovery_rate'] = hrv_recovery_rate
+            print(f"  ✓ Activity {idx} (Borg {borg}): "
+                  f"HRV_Recovery_Rate={hrv_recovery_rate:.3f} ms/s "
+                  f"({hrv_activity:.1f}→{hrv_recovery:.1f} ms), "
+                  f"assigned to {n_assigned} windows")
+            successful_labels += 1
+    
+    n_labeled = windows_labeled['hrv_recovery_rate'].notna().sum()
+    print(f"\n  ✓ Labeled {n_labeled} windows with HRV recovery rates from {successful_labels} activities")
+    
+    return windows_labeled

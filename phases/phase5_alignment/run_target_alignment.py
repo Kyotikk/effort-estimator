@@ -6,6 +6,9 @@ from phases.phase5_alignment.adl_alignment import (
     parse_adl_intervals,
     align_windows_to_borg,
 )
+from phases.phase5_alignment.compute_hrv_recovery import (
+    align_windows_to_hrv_recovery_rr,
+)
 
 FUSION_REQUIRED_COLS = [
     "window_id",
@@ -13,7 +16,6 @@ FUSION_REQUIRED_COLS = [
     "t_center",
     "t_end",
     "modality",
-    "borg",
 ]
 
 
@@ -22,6 +24,8 @@ def run_alignment(
     windows_path: Path,
     adl_path: Path,
     out_path: Path,
+    target_type: str = "borg",
+    rr_path: Path = None,
 ) -> None:
     # -------------------------
     # Load inputs
@@ -42,7 +46,7 @@ def run_alignment(
             raise ValueError(f"Windows missing '{c}'. Found: {list(windows.columns)}")
 
     # -------------------------
-    # Parse ADL intervals and align Borg labels onto windows
+    # Parse ADL intervals and align target labels onto windows
     # -------------------------
     intervals = parse_adl_intervals(adl_path)
 
@@ -57,11 +61,23 @@ def run_alignment(
     print(f"  ADL recording time: {adl_t_start:.1f} to {adl_t_end:.1f}")
     print(f"  Windows before filtering: {len(windows)}")
     print(f"  Windows in ADL time range: {len(windows_in_range)}")
+    print(f"  Target type: {target_type}")
 
-    windows_labeled = align_windows_to_borg(
-        windows=windows_in_range,
-        intervals=intervals,
-    )
+    if target_type == "borg":
+        windows_labeled = align_windows_to_borg(
+            windows=windows_in_range,
+            intervals=intervals,
+        )
+    elif target_type == "hrv_recovery_rate":
+        if rr_path is None:
+            raise ValueError("rr_path required when target_type='hrv_recovery_rate'")
+        windows_labeled = align_windows_to_hrv_recovery_rr(
+            windows=windows_in_range,
+            intervals=intervals,
+            rr_path=rr_path,
+        )
+    else:
+        raise ValueError(f"Unknown target_type: {target_type}. Must be 'borg' or 'hrv_recovery_rate'.")
 
     # -------------------------
     # Choose merge keys
@@ -70,12 +86,15 @@ def run_alignment(
     have_se = {"start_idx", "end_idx"}.issubset(features.columns) and {"start_idx", "end_idx"}.issubset(windows_labeled.columns)
     have_wid = ("window_id" in features.columns) and ("window_id" in windows_labeled.columns)
 
+    # Dynamic target column name
+    target_col = "hrv_recovery_rate" if target_type == "hrv_recovery_rate" else "borg"
+
     if have_se:
         merge_keys = ["start_idx", "end_idx"]
-        meta_cols = ["start_idx", "end_idx", "window_id", "t_start", "t_center", "t_end", "borg"]
+        meta_cols = ["start_idx", "end_idx", "window_id", "t_start", "t_center", "t_end", target_col]
     elif have_wid:
         merge_keys = ["window_id"]
-        meta_cols = ["window_id", "t_start", "t_center", "t_end", "borg"]
+        meta_cols = ["window_id", "t_start", "t_center", "t_end", target_col]
     else:
         raise ValueError(
             "Cannot align: need either start_idx/end_idx in BOTH features & windows, "
@@ -109,11 +128,14 @@ def run_alignment(
     if "modality" not in Xy.columns:
         Xy["modality"] = "fused"
 
-    # Drop unlabeled windows (keep only windows with Borg labels)
-    # Xy = Xy.dropna(subset=["borg"]).copy()
+    # Add target column to required cols for validation
+    fusion_cols_check = FUSION_REQUIRED_COLS + [target_col]
+
+    # Drop unlabeled windows (keep only windows with target labels)
+    # Xy = Xy.dropna(subset=[target_col]).copy()
 
     # Final contract check for fusion
-    missing = [c for c in FUSION_REQUIRED_COLS if c not in Xy.columns]
+    missing = [c for c in fusion_cols_check if c not in Xy.columns]
     if missing:
         raise ValueError(
             f"Aligned output missing fusion-required columns: {missing}. "
@@ -124,8 +146,8 @@ def run_alignment(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     Xy.to_csv(out_path, index=False)
 
-    n_labeled = int(Xy["borg"].notna().sum()) if "borg" in Xy.columns else 0
-    print(f"Saved aligned dataset to {out_path} ({len(Xy)} windows | borg labeled: {n_labeled})")
+    n_labeled = int(Xy[target_col].notna().sum()) if target_col in Xy.columns else 0
+    print(f"Saved aligned dataset to {out_path} ({len(Xy)} windows | {target_col} labeled: {n_labeled})")
 
 
 # -----------------------------------------------------------------

@@ -38,6 +38,10 @@ def run_pipeline(config_path: str) -> None:
 
     overlap = float(cfg["windowing"]["overlap"])
     win_lengths = cfg["windowing"]["window_lengths_sec"]
+    
+    # Get target type and RR path from config
+    target_type = cfg.get("targets", {}).get("target_type", "borg")
+    rr_path = cfg.get("targets", {}).get("imu", {}).get("rr_path", None)
 
     for dataset in cfg["datasets"]:
         name = dataset["name"]
@@ -259,6 +263,8 @@ def run_pipeline(config_path: str) -> None:
                     windows_path=str(imu_win_path),
                     adl_path=adl_path,
                     out_path=str(imu_aligned_path),
+                    target_type=target_type,
+                    rr_path=Path(rr_path) if rr_path else None,
                 )
 
             # ---- PPG variants windows/features/QC/alignment ----
@@ -312,6 +318,8 @@ def run_pipeline(config_path: str) -> None:
                         windows_path=str(ppg_win_path),
                         adl_path=adl_path,
                         out_path=str(ppg_aligned_path),
+                        target_type=target_type,
+                        rr_path=Path(rr_path) if rr_path else None,
                     )
 
             # ---- RR windows/features/QC/alignment (SKIPPED - non-uniform sampling) ----
@@ -362,6 +370,8 @@ def run_pipeline(config_path: str) -> None:
                         windows_path=str(eda_win_path),
                         adl_path=adl_path,
                         out_path=str(eda_aligned_path),
+                        target_type=target_type,
+                        rr_path=Path(rr_path) if rr_path else None,
                     )
 
         # ---------- FUSION ----------
