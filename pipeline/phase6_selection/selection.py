@@ -1,91 +1,102 @@
 """
-Feature Selection Module
-========================
-Selects top N features using PCA-based energy ranking.
-Removes correlated and low-variance features.
+Feature selection module - selects and prunes features.
+
+Callable functions:
+- select_features()  # Main feature selection function
 """
 
 import pandas as pd
-import numpy as np
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-import logging
+from pathlib import Path
+from ml.feature_selection_and_qc import (
+    select_and_prune_features,
+    perform_pca_analysis,
+    save_feature_selection_results
+)
 
-logger = logging.getLogger(__name__)
 
-
-def select_features(
-    X: pd.DataFrame,
-    n_features: int = 50,
-    corr_threshold: float = 0.95,
-    variance_threshold: float = 1e-8,
-) -> dict:
+def select_features(df, target_col='borg', corr_threshold=0.90, top_n=100):
     """
-    Select top N features using PCA-based energy ranking.
+    Select features using correlation-based pruning.
     
     Args:
-        X: Feature matrix DataFrame
-        n_features: Number of top features to select
-        corr_threshold: Remove features with |correlation| >= threshold
-        variance_threshold: Remove features with variance <= threshold
-    
+        df: DataFrame with features and target
+        target_col: Name of target column
+        corr_threshold: Correlation threshold for pruning
+        top_n: Top N features to consider before pruning
+        
     Returns:
-        Dictionary with:
-            - 'X_selected': Selected feature matrix
-            - 'selected_features': List of selected feature names
-            - 'pca': Fitted PCA object
-            - 'explained_variance': PCA explained variance DataFrame
+        tuple: (selected_features_list, X_selected, y)
     """
-    # Remove constant features
-    var = X.var(axis=0, skipna=True)
-    X = X.loc[:, var > variance_threshold]
-    logger.info(f"After variance filter: {X.shape[1]} features")
-    
-    # Remove highly correlated features
-    corr_matrix = X.corr().abs()
-    np.fill_diagonal(corr_matrix.values, 0)
-    
-    drop_features = set()
-    for i in range(len(corr_matrix.columns)):
-        for j in range(i + 1, len(corr_matrix.columns)):
-            if corr_matrix.iloc[i, j] >= corr_threshold:
-                drop_features.add(corr_matrix.columns[j])
-    
-    X = X.drop(columns=list(drop_features))
-    logger.info(f"After correlation filter: {X.shape[1]} features")
-    
-    # Standardize
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    
-    # PCA for feature ranking
-    pca = PCA()
-    pca.fit(X_scaled)
-    
-    # Energy score: contribution of each feature across top PCs
-    cum_var = np.cumsum(pca.explained_variance_ratio_)
-    n_pcs = min(50, len(cum_var))  # Use top 50 PCs for ranking
-    
-    loadings = np.abs(pca.components_[:n_pcs, :])
-    energy_scores = np.sum(loadings * pca.explained_variance_ratio_[:n_pcs, np.newaxis], axis=0)
-    
-    # Select top N features
-    top_indices = np.argsort(energy_scores)[::-1][:n_features]
-    selected_features = [X.columns[i] for i in sorted(top_indices)]
-    
-    X_selected = X[selected_features].copy()
-    
-    logger.info(f"Selected {len(selected_features)} top features")
-    
-    explained_var_df = pd.DataFrame({
-        "PC": [f"PC{i+1}" for i in range(len(cum_var))],
-        "explained_variance_ratio": pca.explained_variance_ratio_,
-        "cumulative_explained_variance": cum_var,
-    })
-    
-    return {
-        "X_selected": X_selected,
-        "selected_features": selected_features,
-        "pca": pca,
-        "explained_variance": explained_var_df,
+    # Remove metadata columns
+    skip_cols = {
+        'window_id', 'start_idx', 'end_idx', 'valid',
+        't_start', 't_center', 't_end', 'n_samples', 'win_sec',
+        'modality', 'subject', target_col,
     }
+    
+    def is_metadata(col):
+        if col in skip_cols:
+            return True
+        if col.endswith('_r') or any(col.endswith(f'_r.{i}') for i in range(1, 10)):
+            return True
+        return False
+    
+    feature_cols = [col for col in df.columns if not is_metadata(col)]
+    X = df[feature_cols].values
+    y = df[target_col].values
+    
+    print(f"  Features before selection: {len(feature_cols)}")
+    
+    # Select top features by correlation + prune
+    pruned_indices, pruned_cols = select_and_prune_features(
+        X, y, feature_cols,
+        corr_threshold=corr_threshold,
+        top_n=top_n
+    )
+    
+    X_selected = X[:, pruned_indices]
+    
+    print(f"  Features after selection: {len(pruned_cols)}")
+    
+    return pruned_cols, X_selected, y
+
+
+def save_feature_selection_outputs(output_dir, df, selected_cols, window_length):
+    """
+    Save selected features to CSV and generate PCA analysis.
+    
+    Args:
+        output_dir: Directory to save outputs
+        df: Original DataFrame
+        selected_cols: List of selected feature column names
+        window_length: Window length for naming
+        
+    Returns:
+        Path to selected features CSV
+    """
+    output_path = Path(output_dir) if isinstance(output_dir, str) else output_dir
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    # Get labeled data
+    df_labeled = df.dropna(subset=['borg']).copy()
+    X = df_labeled[selected_cols].values
+    y = df_labeled['borg'].values
+    
+    # PCA analysis
+    explained_df, loadings_df, top_loadings_df, pcs = perform_pca_analysis(X, selected_cols)
+    
+    # Save selection results
+    qc_dir = output_path / f"qc_{window_length:.1f}s"
+    save_feature_selection_results(
+        str(qc_dir),
+        selected_cols,
+        explained_df,
+        loadings_df,
+        top_loadings_df
+    )
+    
+    # Save selected features to CSV
+    features_file = output_path / f"features_selected_pruned.csv"
+    pd.DataFrame({'feature': selected_cols}).to_csv(features_file, index=False)
+    
+    return features_file
