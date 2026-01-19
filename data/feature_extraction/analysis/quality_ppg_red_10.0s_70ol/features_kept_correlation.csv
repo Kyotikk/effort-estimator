@@ -14,8 +14,8 @@ ppg_red_shape_factor
 ppg_red_impulse_factor
 ppg_red_clearance_factor
 ppg_red_mean_cross_rate
+ppg_red_tke_mean
 ppg_red_tke_std
-ppg_red_tke_mean_abs
 ppg_red_ddx_mean
 ppg_red_ddx_std
 ppg_red_dx_kurtosis
