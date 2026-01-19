@@ -8,11 +8,11 @@ through the full pipeline, then combines and trains a multi-subject model.
 
 import os
 import sys
-import subprocess
 import yaml
 from pathlib import Path
 import pandas as pd
 import numpy as np
+from run_pipeline import run_pipeline
 from phases.phase6_feature_selection.feature_selection_and_qc import select_and_prune_features, perform_pca_analysis, save_feature_selection_results
 
 DATA_ROOT = "/Users/pascalschlegel/data/interim/parsingsim3"
@@ -286,23 +286,15 @@ def run_subject_pipeline(subject):
     
     print(f"✓ Config: {config_path}")
     
-    # Run pipeline
+    # Run pipeline directly (no subprocess)
     print(f"▶ Running pipeline...")
-    result = subprocess.run(
-        [sys.executable, "run_pipeline.py", str(config_path)],
-        cwd="/Users/pascalschlegel/effort-estimator",
-        capture_output=True,
-        text=True,
-    )
-    
-    if result.returncode != 0:
+    try:
+        run_pipeline(str(config_path))
+    except Exception as exc:
         print(f"✗ Pipeline failed for {subject}")
-        if result.stderr:
-            print(f"  Error stderr:\n{result.stderr}")
-        if result.stdout:
-            print(f"  Last stdout:\n{result.stdout[-1000:]}")
+        print(f"  Error: {exc}")
         return False
-    
+
     print(f"✓ Pipeline completed for {subject}")
     return True
 

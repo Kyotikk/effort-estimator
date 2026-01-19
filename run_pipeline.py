@@ -3,7 +3,6 @@
 
 import yaml
 from pathlib import Path
-import subprocess
 import sys
 import pandas as pd
 
@@ -15,29 +14,14 @@ from phases.phase1_preprocessing.rr import preprocess_rr
 from phases.phase2_windowing.windows import create_windows
 from phases.phase3_features.manual_features_imu import compute_top_imu_features_from_windows
 
-from ml.targets.run_target_alignment import run_alignment
-from ml.run_fusion import main as run_fusion
+from phases.phase5_alignment.run_target_alignment import run_alignment
+from phases.phase4_fusion.run_fusion import main as run_fusion
 from phases.phase6_feature_selection.feature_selection_and_qc import main as run_feature_selection
 
 
 def load_config(path: str) -> dict:
     with open(path, "r") as f:
         return yaml.safe_load(f)
-
-
-def run_qc(in_csv: Path, out_dir: Path) -> None:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.check_call(
-        [
-            sys.executable,
-            "phases/phase2_windowing/feature_quality_check_any.py",
-            "--in_csv",
-            str(in_csv),
-            "--out_dir",
-            str(out_dir),
-        ]
-    )
-
 
 def _ensure_modality_col(df: pd.DataFrame, modality: str) -> pd.DataFrame:
     if "modality" not in df.columns:
@@ -53,9 +37,6 @@ def run_pipeline(config_path: str) -> None:
 
     overlap = float(cfg["windowing"]["overlap"])
     win_lengths = cfg["windowing"]["window_lengths_sec"]
-
-    qc_root = Path(cfg.get("qc", {}).get("out_dir", "data/feature_extraction/analysis"))
-    qc_root.mkdir(parents=True, exist_ok=True)
 
     for dataset in cfg["datasets"]:
         name = dataset["name"]
@@ -268,9 +249,6 @@ def run_pipeline(config_path: str) -> None:
                 imu_feats = _ensure_modality_col(imu_feats, feat_cfg_imu.get("modality", "imu"))
                 imu_feats.to_csv(imu_feat_path, index=False)
 
-            # ---- IMU QC ----
-            run_qc(imu_feat_path, qc_root / f"quality_imu_{win_sec:.1f}s_{int(overlap*100)}ol")
-
             # ---- IMU alignment ----
             adl_path = cfg["targets"]["imu"]["adl_path"]
             imu_aligned_path = imu_out_dir / f"imu_aligned_{win_sec:.1f}s.csv"
@@ -326,8 +304,6 @@ def run_pipeline(config_path: str) -> None:
                     tmp = _ensure_modality_col(tmp, feat_cfg_ppg_local.get("modality", ppg_key))
                     tmp.to_csv(ppg_feat_path, index=False)
 
-                run_qc(ppg_feat_path, qc_root / f"quality_{ppg_key}_{win_sec:.1f}s_{int(overlap*100)}ol")
-
                 ppg_aligned_path = ppg_out_dir_local / f"{ppg_key}_aligned_{win_sec:.1f}s.csv"
                 if not ppg_aligned_path.exists():
                     run_alignment(
@@ -377,8 +353,6 @@ def run_pipeline(config_path: str) -> None:
                     tmp = pd.read_csv(eda_feat_path)
                     tmp = _ensure_modality_col(tmp, feat_cfg_eda.get("modality", "eda"))
                     tmp.to_csv(eda_feat_path, index=False)
-
-                run_qc(eda_feat_path, qc_root / f"quality_eda_{win_sec:.1f}s_{int(overlap*100)}ol")
 
                 eda_aligned_path = eda_out_dir / f"eda_aligned_{win_sec:.1f}s.csv"
                 if not eda_aligned_path.exists():
