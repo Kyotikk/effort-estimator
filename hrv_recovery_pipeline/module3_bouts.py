@@ -10,19 +10,96 @@ import pandas as pd
 import logging
 from pathlib import Path
 from typing import Optional
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 
-def parse_adl_intervals(adl_path: Path) -> pd.DataFrame:
+def parse_scai_adl_format(adl_path: Path) -> pd.DataFrame:
+    """
+    Parse SCAI ADL format with Start/End pairs.
+    
+    Format:
+        - Header rows: User ID, Start of Recording  
+        - Columns: Time, ADLs, Effort
+        - "Activity Start" / "Activity End" pairs
+        - Effort rating on End row
+    
+    Args:
+        adl_path: Path to SCAI ADL CSV
+        
+    Returns:
+        DataFrame with [t_start, t_end, duration_sec, task_name, effort]
+    """
+    if not Path(adl_path).exists():
+        logger.warning(f"ADL file not found: {adl_path}")
+        return pd.DataFrame()
+    
+    try:
+        # Skip first 2 rows (User ID and Start of Recording)
+        df = pd.read_csv(adl_path, skiprows=2)
+    except Exception as e:
+        logger.error(f"Failed to parse SCAI ADL file: {e}")
+        return pd.DataFrame()
+    
+    def parse_timestamp(ts_str):
+        """Parse SCAI timestamp: DD-MM-YYYY-HH-MM-SS-mmm"""
+        if pd.isna(ts_str):
+            return None
+        try:
+            dt = datetime.strptime(ts_str, "%d-%m-%Y-%H-%M-%S-%f")
+            return dt.timestamp()
+        except Exception:
+            return None
+    
+    df['unix_time'] = df['Time'].apply(parse_timestamp)
+    
+    # Pair Start/End rows
+    bouts = []
+    i = 0
+    while i < len(df) - 1:
+        row = df.iloc[i]
+        adl = row['ADLs']
+        
+        if isinstance(adl, str) and 'Start' in adl:
+            task_base = adl.replace(' Start', '')
+            next_row = df.iloc[i + 1]
+            next_adl = next_row['ADLs']
+            
+            if isinstance(next_adl, str) and next_adl == f"{task_base} End":
+                t_start = row['unix_time']
+                t_end = next_row['unix_time']
+                effort = next_row['Effort']
+                
+                if t_start and t_end:
+                    bouts.append({
+                        't_start': t_start,
+                        't_end': t_end,
+                        'duration_sec': t_end - t_start,
+                        'task_name': task_base,
+                        'effort': effort if pd.notna(effort) else None
+                    })
+                
+                i += 2
+                continue
+        i += 1
+    
+    bouts_df = pd.DataFrame(bouts)
+    logger.info(f"Parsed {len(bouts_df)} effort bouts from SCAI format")
+    return bouts_df
+
+
+def parse_adl_intervals(adl_path: Path, format: str = 'auto') -> pd.DataFrame:
     """
     Parse ADL (Activities of Daily Living) intervals from CSV.
     
-    Expected columns: t_start, t_end, task_name (or activity)
-    Optional: borg, intensity
+    Supports two formats:
+    1. Standard: columns [t_start, t_end, task_name]
+    2. SCAI: Start/End pairs with Time, ADLs, Effort columns
     
     Args:
         adl_path: Path to ADL CSV
+        format: 'auto', 'standard', or 'scai'
         
     Returns:
         adl_df: DataFrame with columns [t_start, t_end, task_name, ...]
@@ -31,6 +108,21 @@ def parse_adl_intervals(adl_path: Path) -> pd.DataFrame:
         logger.warning(f"ADL file not found: {adl_path}")
         return pd.DataFrame()
     
+    # Try SCAI format first if auto-detect
+    if format == 'auto' or format == 'scai':
+        try:
+            # Peek at file to check format
+            with open(adl_path) as f:
+                first_lines = [next(f) for _ in range(5)]
+            
+            # SCAI format has "User ID:" in first line
+            if 'User ID:' in first_lines[0]:
+                logger.info("Detected SCAI ADL format")
+                return parse_scai_adl_format(adl_path)
+        except Exception as e:
+            logger.debug(f"SCAI format check failed: {e}")
+    
+    # Try standard format
     try:
         adl_df = pd.read_csv(adl_path)
     except Exception as e:
@@ -55,7 +147,7 @@ def parse_adl_intervals(adl_path: Path) -> pd.DataFrame:
     
     adl_df['task_name'] = adl_df.get('task_name', 'unknown')
     
-    logger.info(f"Parsed {len(adl_df)} ADL intervals from {adl_path}")
+    logger.info(f"Parsed {len(adl_df)} ADL intervals from standard format")
     return adl_df[['t_start', 't_end', 'task_name']]
 
 
