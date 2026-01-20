@@ -7,11 +7,76 @@ Detect pulse peaks, compute IBIs, apply validity filters.
 
 import numpy as np
 import pandas as pd
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, butter, filtfilt, medfilt
 from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def preprocess_ppg_for_peaks(
+    signal: np.ndarray,
+    fs: float = 128.0,
+) -> np.ndarray:
+    """
+    Preprocess raw PPG signal for robust peak detection.
+    
+    Steps:
+    1. Remove outliers
+    2. Detrend to remove DC drift
+    3. Bandpass filter (0.5-4 Hz for cardiac range)
+    4. Normalize to unit variance
+    
+    Args:
+        signal: Raw PPG signal
+        fs: Sampling frequency (Hz)
+        
+    Returns:
+        processed_signal: Ready for peak detection
+    """
+    if len(signal) < 3 * fs:
+        logger.warning("Signal too short for preprocessing")
+        return signal
+    
+    # Step 1: Remove extreme outliers (clipping)
+    p5, p95 = np.percentile(signal, [5, 95])
+    signal_clipped = np.clip(signal, p5, p95)
+    
+    # Step 2: Detrend (remove slow baseline wander)
+    # Use median filtering to estimate baseline, then subtract
+    from scipy.signal import medfilt
+    window_size = int(fs * 0.6)  # 0.6s median filter
+    if window_size % 2 == 0:
+        window_size += 1
+    baseline = medfilt(signal_clipped, kernel_size=window_size)
+    signal_detrended = signal_clipped - baseline
+    
+    # Step 3: Bandpass filter (0.5-4 Hz = 30-240 bpm)
+    lowcut = 0.5
+    highcut = 4.0
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    
+    # Ensure valid range
+    low = np.clip(low, 0.01, 0.98)
+    high = np.clip(high, low + 0.01, 0.99)
+    
+    try:
+        b, a = butter(4, [low, high], btype='band')
+        signal_filtered = filtfilt(b, a, signal_detrended)
+    except Exception as e:
+        logger.error(f"Bandpass filtering failed: {e}")
+        signal_filtered = signal_detrended
+    
+    # Step 4: Normalize to unit variance (makes prominence threshold stable)
+    std = np.std(signal_filtered)
+    if std > 1e-6:
+        signal_normalized = signal_filtered / std
+    else:
+        signal_normalized = signal_filtered
+    
+    return signal_normalized
 
 
 def detect_ppg_peaks(
@@ -19,15 +84,17 @@ def detect_ppg_peaks(
     fs: float = 32.0,
     distance_ms: int = 400,
     prominence_percentile: int = 80,
+    preprocess: bool = True,
 ) -> np.ndarray:
     """
     Detect heartbeat peaks in PPG signal.
     
     Args:
-        signal: 1D PPG waveform (inverted so peaks = high values)
+        signal: 1D PPG waveform
         fs: Sampling frequency (Hz)
         distance_ms: Minimum distance between peaks (milliseconds)
-        prominence_percentile: Use this percentile of signal range for prominence
+        prominence_percentile: Use this percentile of signal range for prominence (ignored if preprocessed)
+        preprocess: Apply preprocessing before peak detection (recommended: True)
         
     Returns:
         peak_indices: Indices of detected peaks (1D array)
@@ -36,19 +103,24 @@ def detect_ppg_peaks(
         logger.warning(f"Signal too short ({len(signal)} samples), returning empty peaks")
         return np.array([], dtype=int)
     
-    # Invert so peaks are high values (typical PPG has peaks as dips)
-    inverted = -signal
-    
-    # Set prominence threshold based on signal dynamics
-    signal_range = np.nanmax(inverted) - np.nanmin(inverted)
-    prominence = (signal_range * prominence_percentile / 100.0) if signal_range > 0 else 0.01
+    # Preprocess: robust detrending + filtering + normalization
+    if preprocess:
+        signal_processed = preprocess_ppg_for_peaks(signal, fs=fs)
+        # After normalization, use fixed prominence (in std units)
+        prominence = 0.5  # 0.5 standard deviations
+    else:
+        # Invert so peaks are high values (typical PPG has peaks as dips)
+        signal_processed = -signal
+        # Use percentage-based prominence
+        signal_range = np.nanmax(signal_processed) - np.nanmin(signal_processed)
+        prominence = (signal_range * prominence_percentile / 100.0) if signal_range > 0 else 0.01
     
     # Set distance threshold (samples)
     distance_samples = int(distance_ms * fs / 1000.0)
     
     try:
         peaks, _ = find_peaks(
-            inverted,
+            signal_processed,
             distance=distance_samples,
             prominence=prominence,
         )
