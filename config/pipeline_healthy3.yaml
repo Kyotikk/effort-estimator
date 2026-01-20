@@ -1,0 +1,158 @@
+# config/pipeline_healthy3.yaml
+
+project:
+  name: effort_estimation
+  output_dir: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/effort_estimation_output
+
+datasets:
+  - name: parsingsim3_sim_healthy3
+
+    imu_bioz:
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/corsano_bioz_acc/2025-12-04.csv.gz
+      fs_out: 32
+
+    imu_wrist:
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/corsano_wrist_acc/2025-12-04.csv.gz
+      fs_out: 32
+
+    ppg_green:
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/corsano_wrist_ppg2_green_6/2025-12-04.csv.gz
+      fs_out: 32
+
+    ppg_infra:
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/corsano_wrist_ppg2_infra_red_22/2025-12-04.csv.gz
+      fs_out: 32
+
+    ppg_red:
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/corsano_wrist_ppg2_red_182/2025-12-04.csv.gz
+      fs_out: 32
+
+    eda:
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/corsano_bioz_emography/2025-12-04.csv.gz
+      fs_out: 32
+
+    ecg:
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/vivalnk_vv330_ecg/data_1.csv.gz
+      fs: 128.0
+
+preprocessing:
+  imu_bioz:
+    noise_cutoff: 5.0
+    gravity_cutoff: 0.3
+    normalise: false
+
+  imu_wrist:
+    noise_cutoff: 5.0
+    gravity_cutoff: 0.3
+    normalise: false
+
+  ppg_green:
+    time_col: time
+    metric_id: "0x7e"
+    led_pd_pos: 6
+    led: null
+    do_resample: true
+    apply_hpf: false
+
+  ppg_infra:
+    time_col: time
+    metric_id: "0x7b"
+    led_pd_pos: 22
+    led: null
+    do_resample: true
+    apply_hpf: true
+    hpf_cutoff: 0.5
+
+  ppg_red:
+    time_col: time
+    metric_id: "0x7c"
+    led_pd_pos: 182
+    led: null
+    do_resample: true
+    apply_hpf: true
+    hpf_cutoff: 0.5
+
+  ecg:
+    time_col: time
+    ecg_col: ecg
+    fs: 128.0
+    min_rr_ms: 300
+    max_rr_ms: 2000
+
+  eda:
+    time_col: time
+    do_resample: true
+
+windowing:
+  overlap: 0.7
+  window_lengths_sec: [10.0]
+
+features:
+  imu_bioz:
+    modality: imu
+    signals: [acc_x_dyn, acc_y_dyn, acc_z_dyn]
+    feature_set: stat
+    safe: true
+    njobs: 1
+
+  imu_wrist:
+    modality: imu
+    signals: [acc_x_dyn, acc_y_dyn, acc_z_dyn]
+    feature_set: stat
+    safe: true
+    njobs: 1
+
+  ppg_green:
+    modality: ppg_green
+    prefix: "ppg_green_"
+    time_col: "t_sec"
+    signal_col: "value"
+
+  ppg_infra:
+    modality: ppg_infra
+    prefix: "ppg_infra_"
+    time_col: "t_sec"
+    signal_col: "value"
+
+  ppg_red:
+    modality: ppg_red
+    prefix: "ppg_red_"
+    time_col: "t_sec"
+    signal_col: "value"
+
+  eda:
+    modality: eda
+    prefix: "eda_"
+    time_col: "t_sec"
+    cc_col: "eda_cc"
+    stress_col: "eda_stress_skin"
+
+targets:
+  target_type: "hrv_recovery_rate"
+  imu:
+    adl_path: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/scai_app/ADLs_1.csv.gz
+    adl_offset_hours: 0
+    rr_path: null  # Will be generated from ECG
+    rmssd_windows_path: data/interim/rmssd_windows_real.csv
+
+  recovery:
+    rec_start: 10.0
+    rec_end: 60.0
+
+fusion:
+  output_dir: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/effort_estimation_output/parsingsim3_sim_healthy3
+  window_lengths_sec: [10.0]
+
+  tolerance_s:
+    "10.0": 2.0
+
+  modalities:
+    imu_bioz: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/effort_estimation_output/parsingsim3_sim_healthy3/imu_bioz/imu_features_{window_length}.csv
+    imu_wrist: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/effort_estimation_output/parsingsim3_sim_healthy3/imu_wrist/imu_features_{window_length}.csv
+    ppg_green: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/effort_estimation_output/parsingsim3_sim_healthy3/ppg_green/ppg_green_features_{window_length}.csv
+    ppg_infra: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/effort_estimation_output/parsingsim3_sim_healthy3/ppg_infra/ppg_infra_features_{window_length}.csv
+    ppg_red: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/effort_estimation_output/parsingsim3_sim_healthy3/ppg_red/ppg_red_features_{window_length}.csv
+    eda: /Users/pascalschlegel/data/interim/parsingsim3/sim_healthy3/effort_estimation_output/parsingsim3_sim_healthy3/eda/eda_features_{window_length}.csv
+
+logging:
+  verbose: true

@@ -1,0 +1,175 @@
+# Pipeline configuration for sim_elderly3 (parsingsim3)
+# Effort estimation using ECG-derived RMSSD labels and multi-modal sensor features
+
+session:
+  session_id: "parsingsim3_sim_elderly3"
+  cohort: "elderly"
+  sim_version: 3
+  date: "2025-12-04"
+
+# Data paths (absolute)
+paths:
+  data_root: "/Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3"
+  output_root: "/Users/pascalschlegel/effort-estimator/data"
+  
+  # ECG (for labels ONLY)
+  ecg: "${paths.data_root}/vivalnk_vv330_ecg/data_1.csv.gz"
+  
+  # ADL timeline
+  adl_timeline: "${paths.data_root}/scai_app/ADLs_1.csv"
+  
+  # Sensor inputs (for features)
+  sensors:
+    ppg_green: "${paths.data_root}/corsano_wrist_ppg2_green_6/2025-12-04.csv.gz"
+    ppg_red: "${paths.data_root}/corsano_wrist_ppg2_red_182/2025-12-04.csv.gz"
+    ppg_infrared: "${paths.data_root}/corsano_wrist_ppg2_infra_red_22/2025-12-04.csv.gz"
+    wrist_acc: "${paths.data_root}/corsano_wrist_acc/2025-12-04.csv.gz"
+    bioz_acc: "${paths.data_root}/corsano_bioz_acc/2025-12-04.csv.gz"
+    bioz_eda: "${paths.data_root}/corsano_bioz_emography/2025-12-04.csv.gz"
+    heart_rate: "${paths.data_root}/vivalnk_vv330_heart_rate/data_1.csv.gz"
+
+# Label computation (ECG → RMSSD)
+labels:
+  method: "delta_ln_rmssd"  # Options: "delta_ln_rmssd", "recovery_slope", "windowed"
+  
+  ecg:
+    sampling_rate: 256.0  # Hz
+    r_peak_min_distance_ms: 300
+    rr_cleaning:
+      min_rr_ms: 300
+      max_rr_ms: 2000
+      max_diff_percent: 30
+  
+  rmssd:
+    window_size_sec: 60.0
+    overlap_sec: 30.0
+  
+  output: "${paths.output_root}/labels/${session.session_id}_rmssd_labels.csv"
+
+# Feature extraction (NO HRV)
+features:
+  
+  # PPG features (heart rate level only)
+  ppg:
+    enabled: true
+    primary_channel: "ppg_green"  # Use green PPG as primary
+    sampling_rate: 64.0  # Hz
+    features:
+      - ppg_hr_mean
+      - ppg_hr_max
+      - ppg_hr_min
+      - ppg_hr_std
+      - ppg_hr_slope
+      - ppg_hr_range
+      - ppg_signal_quality
+  
+  # IMU features (movement/load)
+  imu:
+    enabled: true
+    primary_source: "wrist_acc"
+    sampling_rate: 50.0  # Hz
+    features:
+      - acc_mag_mean
+      - acc_mag_std
+      - acc_mag_max
+      - acc_mag_integral
+      - steps_sum
+      - cadence_mean
+      - movement_duration
+      - acc_x_mean
+      - acc_x_std
+      - acc_y_mean
+      - acc_y_std
+      - acc_z_mean
+      - acc_z_std
+  
+  # EDA features (sympathetic arousal)
+  eda:
+    enabled: true
+    source: "bioz_eda"
+    sampling_rate: 4.0  # Hz (typically low for EDA)
+    features:
+      - eda_mean
+      - eda_std
+      - eda_min
+      - eda_max
+      - eda_slope
+      - eda_scr_count
+      - eda_scr_rate
+      - eda_scr_mean_amplitude
+      - eda_scr_max_amplitude
+  
+  output: "${paths.output_root}/features/${session.session_id}_features.csv"
+
+# Temporal alignment
+alignment:
+  # How to segment and aggregate features
+  segmentation: "adl_based"  # Options: "adl_based", "fixed_window"
+  
+  # For ADL-based segmentation
+  adl:
+    buffer_before_sec: 0  # seconds before ADL start
+    buffer_after_sec: 0   # seconds after ADL end
+    min_duration_sec: 10  # minimum ADL duration to include
+  
+  # Aggregation method for features within each segment
+  aggregation:
+    methods: ["mean", "max", "std"]  # Apply these to time-varying features
+    
+# Model training configuration
+model:
+  task: "regression"
+  target: "effort_label"  # RMSSD-based effort
+  
+  # Train-test split
+  split:
+    method: "holdout"  # Options: "holdout", "cross_validation"
+    test_size: 0.3
+    random_state: 42
+  
+  # Models to train
+  models:
+    - name: "ridge"
+      type: "Ridge"
+      params:
+        alpha: 1.0
+    
+    - name: "elasticnet"
+      type: "ElasticNet"
+      params:
+        alpha: 1.0
+        l1_ratio: 0.5
+    
+    - name: "xgboost"
+      type: "XGBRegressor"
+      params:
+        n_estimators: 100
+        max_depth: 5
+        learning_rate: 0.1
+        random_state: 42
+  
+  # Evaluation metrics
+  metrics:
+    - "MAE"
+    - "RMSE"
+    - "R2"
+    - "Spearman"
+  
+  output_dir: "${paths.output_root}/models/${session.session_id}"
+
+# Optional: Borg RPE validation (DO NOT use as training target)
+validation:
+  borg_rpe:
+    enabled: false  # Set to true if Borg data available
+    source: "${paths.data_root}/scai_app/ADLs_1.csv"
+    column: "borg_rpe"  # Adapt based on actual column name
+    
+    # Compute correlations only
+    compare:
+      - borg_vs_effort_label
+      - borg_vs_predicted_effort
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  output: "${paths.output_root}/logs/${session.session_id}.log"

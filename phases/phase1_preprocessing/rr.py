@@ -24,6 +24,13 @@ def preprocess_rr(
 
     t = pd.to_numeric(df[time_col], errors="coerce").astype(float).to_numpy()
     rr = pd.to_numeric(df[rr_col], errors="coerce").astype(float).to_numpy()
+    
+    # Handle heart rate (HR) by converting to RR intervals
+    # If rr_col is 'hr', convert HR (bpm) to RR (ms): RR = 60000 / HR
+    if rr_col.lower() == 'hr':
+        # Filter out invalid/negative HR values
+        rr = np.where((rr > 0) & (rr < 220), 60000.0 / rr, np.nan)
+        print(f"  Converted HR to RR intervals (RR = 60000/HR)")
 
     m = np.isfinite(t) & np.isfinite(rr)
     t, rr = t[m], rr[m]
@@ -32,7 +39,9 @@ def preprocess_rr(
 
     order = np.argsort(t)
     t, rr = t[order], rr[order]
-    t_sec = t - float(t[0])
+    
+    # Keep absolute unix timestamps (no relative time conversion)
+    t_sec = t
 
     out = pd.DataFrame({"t_sec": t_sec, "rr": rr}).drop_duplicates("t_sec").reset_index(drop=True)
     out.to_csv(out_path, index=False)

@@ -1,0 +1,96 @@
+# config/pipeline_elderly4.yaml
+
+project:
+  name: effort_estimation
+  output_dir: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/effort_estimation_output
+
+datasets:
+  - name: parsingsim4_sim_elderly4
+
+    imu_bioz:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/corsano_bioz_acc/2025-12-05.csv.gz
+      fs_out: 32
+
+    imu_wrist:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/corsano_wrist_acc/2025-12-05.csv.gz
+      fs_out: 32
+
+    ppg_green:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/corsano_wrist_ppg2_green_6/2025-12-05.csv.gz
+      fs_out: 32
+
+    ppg_infra:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/corsano_wrist_ppg2_infra_red_22/2025-12-05.csv.gz
+      fs_out: 32
+
+    ppg_red:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/corsano_wrist_ppg2_red_182/2025-12-05.csv.gz
+      fs_out: 32
+
+    eda:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/corsano_bioz_emography/2025-12-05.csv.gz
+      fs_out: 4
+
+    bioz:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/corsano_bioz_bioz/2025-12-05.csv.gz
+      fs_out: 32
+
+    rr:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/corsano_bioz_rr_interval/2025-12-05.csv.gz
+      fs_out: 1
+
+    temperature:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/corsano_bioz_temperature/2025-12-05.csv.gz
+      fs_out: 1
+
+    ecg:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/vivalnk_vv330_ecg/data_1.csv.gz
+      fs_out: 128
+
+    vivalnk_acc:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/vivalnk_vv330_acceleration/data_1.csv.gz
+      fs_out: 32
+
+    vivalnk_hr:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/vivalnk_vv330_heart_rate/data_1.csv.gz
+      fs_out: 1
+
+    vivalnk_rr:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/vivalnk_vv330_resp_rate/data_1.csv.gz
+      fs_out: 1
+
+    targets:
+      path: /Users/pascalschlegel/data/interim/parsingsim4/sim_elderly4/scai_app/ADLs_1.csv.gz
+
+windowing:
+  overlap: 0.7
+  window_lengths_sec: [10.0, 5.0, 2.0]
+
+feature_extraction:
+  modalities:
+    - imu
+    - ppg
+    - eda
+    - bioz
+    - rr
+    - temp
+    - ecg
+
+alignment:
+  sampling_rate: 10.0
+  tolerance_seconds: 5.0
+
+fusion:
+  merge_method: outer
+
+feature_selection:
+  method: SelectKBest
+  k: 25
+  score_func: f_regression
+  drop_corr: 0.95
+
+training:
+  model: xgboost
+  target_column: borg
+  test_size: 0.2
+  random_state: 42

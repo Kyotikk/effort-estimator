@@ -1,0 +1,146 @@
+# ECG Processing Pipeline Configuration
+# =====================================
+# Configuration for stages 1-4 of ECG → RMSSD → Effort Label pipeline
+# 
+# STAGE 1: ECG preprocessing (ECG CSV → RR intervals)
+# STAGE 2: RMSSD windowing (RR intervals → windowed RMSSD features)
+# STAGE 3: Effort label construction (RMSSD → effort labels)
+# STAGE 4: Borg validation (Borg RPE correlation)
+
+# ==============================================================================
+# STAGE 1: ECG PREPROCESSING (ecg_preprocess.py)
+# ==============================================================================
+stage_1_ecg_preprocessing:
+  
+  # Input data format
+  input:
+    sampling_rate_hz: 250  # ECG sampling rate (Hz)
+    ecg_column: "ecg"      # Column name for raw ECG values
+    time_column: "t"       # Column name for timestamps (or index)
+    
+  # R-peak detection (Pan-Tompkins style)
+  r_peak_detection:
+    bandpass_low_hz: 5     # Bandpass filter lower cutoff (Hz)
+    bandpass_high_hz: 40   # Bandpass filter upper cutoff (Hz)
+    threshold_factor: 0.5  # Adaptive threshold = factor × max(filtered)
+    min_distance_samples: 75  # Minimum samples between peaks (250 Hz → ~300 ms)
+    
+  # RR interval extraction
+  rr_extraction:
+    interval_ms: true      # Output RR intervals in milliseconds (vs seconds)
+    compute_timestamps: true  # Compute RR timestamps at peak midpoints
+    
+  # Artifact removal (two-pass approach)
+  artifact_removal:
+    # Pass 1: Physiological bounds
+    min_rr_ms: 300         # Minimum physiological RR interval (ms)
+    max_rr_ms: 2000        # Maximum physiological RR interval (ms)
+    
+    # Pass 2: Statistical outlier removal (IQR method)
+    outlier_iqr_multiplier: 1.5  # Standard 1.5 × IQR
+    apply_iqr_filter: true
+    
+  # Quality thresholds
+  quality:
+    min_rr_count: 20       # Require ≥20 RR intervals for valid session
+    warn_artifact_ratio: 0.2  # Warn if >20% artifacts removed
+    
+  # Output
+  output:
+    format: "csv"
+    columns: ["session_id", "peak_index", "t_rr", "rr_ms", "is_valid", "reason"]
+    save_quality_summary: true  # Save JSON with session-level stats
+
+
+# ==============================================================================
+# STAGE 2: RMSSD WINDOWING (ecg_hrv_features.py)
+# ==============================================================================
+stage_2_rmssd_windowing:
+  
+  # Input: RR intervals from Stage 1
+  input:
+    format: "csv"
+    require_valid_column: true
+    
+  # Windowing parameters
+  windowing:
+    window_length_s: 60    # Window duration (seconds)
+    overlap_frac: 0.5      # Overlap as fraction (0.0-1.0, 0.5 = 50% overlap)
+    step_s: null           # Auto-computed: (1 - overlap_frac) × window_length_s
+    
+  # RMSSD computation
+  rmssd:
+    metrics: ["rmssd", "ln_rmssd"]  # Compute both raw and log-transformed
+    min_rr_per_window: 3   # Require ≥3 valid RR intervals per window
+    rr_units: "ms"         # RR input units (milliseconds)
+    
+  # Quality flags per window
+  quality:
+    compute_frac_valid: true  # Compute fraction of valid RR in window
+    compute_n_rr: true
+    flag_sparse_windows: true  # Flag windows with <min_rr_per_window RR intervals
+    
+  # Output
+  output:
+    format: "csv"
+    columns: 
+      - "session_id"
+      - "window_id"
+      - "t_start"
+      - "t_end"
+      - "t_center"
+      - "n_rr_total"
+      - "n_rr_valid"
+      - "frac_valid"
+      - "rmssd"
+      - "ln_rmssd"
+    save_format: "csv"
+
+
+# ==============================================================================
+# STAGE 3: EFFORT LABEL CONSTRUCTION (effort_labels.py - TO IMPLEMENT)
+# ==============================================================================
+stage_3_effort_labels:
+  
+  # Label construction strategy
+  strategy: "rmssd_recovery"  # Options: "rmssd_recovery", "rmssd_delta", "rmssd_threshold"
+  
+  # Strategy: RMSSD recovery slope (HRV reduction under load)
+  recovery_slope:
+    baseline_window_count: 3   # First N windows = baseline (at rest)
+    recovery_threshold_pct: -20  # Label as "Effort" if RMSSD drops >20% from baseline
+    
+  # Strategy: RMSSD delta (absolute change)
+  delta:
+    baseline_length_s: 60      # Baseline period (seconds)
+    delta_threshold_ms: 20     # Label threshold (delta RMSSD in ms)
+    
+  # Output
+  output:
+    format: "csv"
+    label_column: "effort_binary"  # 0=Rest, 1=Effort
+    confidence_column: "effort_confidence"  # 0-1 confidence score
+
+
+# ==============================================================================
+# STAGE 4: BORG VALIDATION (borg_validation.py - TO IMPLEMENT)
+# ==============================================================================
+stage_4_borg_validation:
+  
+  # Borg RPE data alignment
+  alignment:
+    match_by: "session_id"     # Align RMSSD windows to Borg ratings by session
+    time_tolerance_s: 5        # Allow ±5s for time matching
+    
+  # Validation metrics
+  metrics:
+    - "correlation"  # Pearson/Spearman correlation (effort vs Borg)
+    - "auc"          # ROC AUC (binary effort classification)
+    - "accuracy"     # Classification accuracy
+    - "sensitivity"  # True positive rate
+    - "specificity"  # True negative rate
+    
+  # Output
+  output:
+    format: "json"
+    include_plots: true

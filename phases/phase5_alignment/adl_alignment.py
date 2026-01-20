@@ -8,16 +8,22 @@ def _read_adl_any_sep(adl_csv: Path) -> tuple:
     """
     Read ADL CSV robustly. Returns (dataframe, metadata_dict).
     Metadata includes "recording_start" if present.
+    Auto-detects whether to skip metadata rows.
     """
     adl_csv = Path(adl_csv)
     
-    # Try to extract metadata from first 3 lines
+    # Try to extract metadata from first 3 lines and detect skiprows
     metadata = {}
+    skiprows_count = 0
     try:
         import gzip
         with gzip.open(adl_csv, 'rt') if str(adl_csv).endswith('.gz') else open(adl_csv, 'r') as f:
-            lines = [f.readline() for _ in range(3)]
-            for line in lines[:2]:  # Check first 2 lines
+            lines = [f.readline().strip() for _ in range(3)]
+            # Check if first line contains metadata (e.g., "User ID:", "Start of Recording:")
+            has_metadata = any(metadata_marker in lines[0] for metadata_marker in ["User ID:", "Start of Recording:"])
+            skiprows_count = 2 if has_metadata else 0
+            
+            for line in lines[:2]:  # Check first 2 lines for recording start
                 if "Start of Recording:" in line:
                     parts = line.split("Start of Recording:")[1].strip().split(",")[0]
                     metadata["recording_start_str"] = parts
@@ -28,13 +34,13 @@ def _read_adl_any_sep(adl_csv: Path) -> tuple:
     for sep in [",", ";", "\t", "|"]:
         try:
             # Read with dtype=str to preserve empty values as empty strings, not NaN
-            df = pd.read_csv(adl_csv, sep=sep, compression="infer", skiprows=2, dtype=str)
+            df = pd.read_csv(adl_csv, sep=sep, compression="infer", skiprows=skiprows_count, dtype=str)
             candidates.append((df.shape[1], sep, df))
         except Exception:
             pass
 
     if not candidates:
-        df = pd.read_csv(adl_csv, sep=None, engine="python", compression="infer", skiprows=2)
+        df = pd.read_csv(adl_csv, sep=None, engine="python", compression="infer", skiprows=skiprows_count)
     else:
         candidates.sort(key=lambda x: x[0], reverse=True)
         df = candidates[0][2]

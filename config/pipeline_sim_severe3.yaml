@@ -2,37 +2,37 @@
 
 project:
   name: effort_estimation
-  output_dir: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output
+  output_dir: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/effort_estimation_output
 
 datasets:
-  - name: parsingsim3_sim_elderly3
+  - name: parsingsim3_sim_severe3
 
     imu_bioz:
-      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/corsano_bioz_acc/2025-12-04.csv.gz
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/corsano_bioz_acc/2025-12-04.csv.gz
       fs_out: 32
 
     imu_wrist:
-      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/corsano_wrist_acc/2025-12-04.csv.gz
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/corsano_wrist_acc/2025-12-04.csv.gz
       fs_out: 32
 
     ppg_green:
-      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/corsano_wrist_ppg2_green_6/2025-12-04.csv.gz
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/corsano_wrist_ppg2_green_6/2025-12-04.csv.gz
       fs_out: 32
 
     ppg_infra:
-      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/corsano_wrist_ppg2_infra_red_22/2025-12-04.csv.gz
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/corsano_wrist_ppg2_infra_red_22/2025-12-04.csv.gz
       fs_out: 32
 
     ppg_red:
-      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/corsano_wrist_ppg2_red_182/2025-12-04.csv.gz
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/corsano_wrist_ppg2_red_182/2025-12-04.csv.gz
       fs_out: 32
 
     eda:
-      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/corsano_bioz_emography/2025-12-04.csv.gz
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/corsano_bioz_emography/2025-12-04.csv.gz
       fs_out: 32
 
     rr:
-      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/vivalnk_vv330_heart_rate/data_1.csv.gz
+      path: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/vivalnk_vv330_heart_rate/data_1.csv.gz
       fs_out: 1
 
 preprocessing:
@@ -147,9 +147,9 @@ targets:
   target_type: "hrv_recovery_rate"  # Options: "borg" or "hrv_recovery_rate"
   imu:
     # can exist even if borg labeling is not used yet
-    adl_path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/scai_app/ADLs_1.csv
-    adl_offset_hours: 0
-    rr_path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/vivalnk_vv330_heart_rate/data_1.csv.gz
+    adl_path: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/scai_app/ADLs_1.csv.gz
+    adl_offset_hours: 8.3
+    rr_path: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/vivalnk_vv330_heart_rate/data_1.csv.gz
     rmssd_windows_path: data/interim/rmssd_windows_real.csv
 
   recovery:
@@ -157,7 +157,7 @@ targets:
     rec_end: 60.0     # seconds after activity end
 
 fusion:
-  output_dir: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3
+  output_dir: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/effort_estimation_output/parsingsim3_sim_severe3
   window_lengths_sec: [10.0, 5.0, 2.0]
 
   # tolerance for merge_asof (in seconds)
@@ -170,12 +170,12 @@ fusion:
   # IMPORTANT: point these to the FEATURE tables you actually want to fuse
   # (if you fuse *_features_*.csv, set them accordingly)
   modalities:
-    imu_bioz: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3/imu_bioz/imu_features_{window_length}.csv
-    imu_wrist: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3/imu_wrist/imu_features_{window_length}.csv
-    ppg_green: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3/ppg_green/ppg_green_features_{window_length}.csv
-    ppg_infra: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3/ppg_infra/ppg_infra_features_{window_length}.csv
-    ppg_red: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3/ppg_red/ppg_red_features_{window_length}.csv
-    eda: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3/eda/eda_features_{window_length}.csv
+    imu_bioz: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/effort_estimation_output/parsingsim3_sim_severe3/imu_bioz/imu_features_{window_length}.csv
+    imu_wrist: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/effort_estimation_output/parsingsim3_sim_severe3/imu_wrist/imu_features_{window_length}.csv
+    ppg_green: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/effort_estimation_output/parsingsim3_sim_severe3/ppg_green/ppg_green_features_{window_length}.csv
+    ppg_infra: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/effort_estimation_output/parsingsim3_sim_severe3/ppg_infra/ppg_infra_features_{window_length}.csv
+    ppg_red: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/effort_estimation_output/parsingsim3_sim_severe3/ppg_red/ppg_red_features_{window_length}.csv
+    eda: /Users/pascalschlegel/data/interim/parsingsim3/sim_severe3/effort_estimation_output/parsingsim3_sim_severe3/eda/eda_features_{window_length}.csv
 
 logging:
   verbose: true

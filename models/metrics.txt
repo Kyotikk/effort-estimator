@@ -1,0 +1,39 @@
+MODEL PERFORMANCE METRICS
+==================================================
+
+Model type: rf
+Number of samples: 33
+Number of features: 21
+
+Cross-Validation Results:
+  MAE: 10.111 ± 2.129 ms
+  R²: -1.036 ± 1.217
+
+Full Dataset Performance:
+  MAE: 4.283 ms
+  RMSE: 6.079 ms
+  R²: 0.799
+
+
+Top 20 Feature Importances:
+--------------------------------------------------
+acc_mag_min                    0.197625
+ppg_signal_quality             0.146196
+acc_z_std                      0.076802
+acc_mag_mean                   0.069244
+acc_y_std                      0.061701
+ppg_hr_std                     0.049459
+ppg_hr_slope                   0.044529
+acc_x_mean                     0.043073
+acc_z_mean                     0.041587
+acc_mag_integral               0.040415
+acc_y_mean                     0.040158
+ppg_n_beats                    0.031803
+ppg_hr_mean                    0.030886
+acc_mag_std                    0.030165
+acc_raw_mean                   0.027143
+acc_mag_range                  0.020220
+acc_mag_max                    0.014956
+ppg_hr_min                     0.012706
+ppg_hr_range                   0.012277
+acc_x_std                      0.008688

@@ -147,8 +147,8 @@ targets:
   target_type: "hrv_recovery_rate"  # Options: "borg" or "hrv_recovery_rate"
   imu:
     # can exist even if borg labeling is not used yet
-    adl_path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/scai_app/ADLs_1.csv
-    adl_offset_hours: 0
+    adl_path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/scai_app/ADLs_1.csv.gz
+    adl_offset_hours: 8.2
     rr_path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/vivalnk_vv330_heart_rate/data_1.csv.gz
     rmssd_windows_path: data/interim/rmssd_windows_real.csv
 

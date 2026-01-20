@@ -313,7 +313,7 @@ def align_windows_to_hrv_recovery(windows_df, ppg_df, adl_df, fs=32):
 
 def align_windows_to_hrv_recovery_rr(windows, intervals, rr_path):
     """
-    Assign HRV recovery rates to windows using pre-extracted RR intervals.
+    Assign HRV recovery rates to windows using pre-extracted RR intervals or heart rate.
     
     This function reads RR intervals from a CSV file and aligns them with
     windows during recovery phases of ADL activities.
@@ -321,7 +321,7 @@ def align_windows_to_hrv_recovery_rr(windows, intervals, rr_path):
     Args:
         windows: DataFrame with columns [window_id, t_start, t_center, t_end]
         intervals: ADL intervals DataFrame with columns [t_start, t_end, borg, ...]
-        rr_path: Path to CSV with RR intervals (columns: time/t_sec, rr_ms or similar)
+        rr_path: Path to CSV with RR intervals (columns: time/t_sec, rr_ms or hr)
         
     Returns:
         windows_labeled: Windows with hrv_recovery_rate column
@@ -331,18 +331,33 @@ def align_windows_to_hrv_recovery_rr(windows, intervals, rr_path):
     
     windows_labeled = windows.copy()
     
-    # Load RR intervals
+    # Load RR intervals or heart rate
     try:
         rr_df = pd.read_csv(rr_path)
     except Exception as e:
-        raise ValueError(f"Cannot load RR intervals from {rr_path}: {e}")
+        raise ValueError(f"Cannot load RR/HR data from {rr_path}: {e}")
     
     # Handle different column name conventions
     time_col = 'time' if 'time' in rr_df.columns else 't_sec'
-    rr_col = 'rr_ms' if 'rr_ms' in rr_df.columns else ('rr' if 'rr' in rr_df.columns else None)
     
-    if rr_col is None:
-        raise ValueError(f"RR CSV must have 'rr_ms' or 'rr' column. Found: {list(rr_df.columns)}")
+    # Check if we have RR intervals or heart rate
+    if 'rr_ms' in rr_df.columns:
+        rr_col = 'rr_ms'
+        is_hr = False
+    elif 'rr' in rr_df.columns:
+        rr_col = 'rr'
+        is_hr = False
+    elif 'hr' in rr_df.columns:
+        # Convert HR to RR: RR (ms) = 60000 / HR (bpm)
+        rr_df['rr_ms'] = 60000.0 / rr_df['hr'].replace(0, np.nan).abs()  # Handle negative/zero HR
+        rr_col = 'rr_ms'
+        is_hr = True
+        print(f"  Converted HR to RR intervals (RR = 60000/HR)")
+    else:
+        raise ValueError(f"File must have 'rr_ms', 'rr', or 'hr' column. Found: {list(rr_df.columns)}")
+    
+    # Filter out invalid RR intervals (physiologically impossible)
+    rr_df = rr_df[rr_df[rr_col].notna() & (rr_df[rr_col] > 0) & (rr_df[rr_col] < 5000)].copy()
     
     # Add hrv_recovery_rate column (initially NaN)
     windows_labeled['hrv_recovery_rate'] = np.nan

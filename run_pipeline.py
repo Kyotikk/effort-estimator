@@ -5,17 +5,20 @@ import yaml
 from pathlib import Path
 import sys
 import pandas as pd
+import subprocess
 
 from phases.phase1_preprocessing.imu import preprocess_imu
 from phases.phase1_preprocessing.ppg import preprocess_ppg
 from phases.phase1_preprocessing.eda import preprocess_eda
 from phases.phase1_preprocessing.rr import preprocess_rr
+from phases.phase1_preprocessing.ecg import preprocess_ecg
 
 from phases.phase2_windowing.windows import create_windows
 from phases.phase3_features.manual_features_imu import compute_top_imu_features_from_windows
 
 from phases.phase5_alignment.run_target_alignment import run_alignment
-from phases.phase5_alignment.compute_hrv_recovery import align_windows_to_hrv_recovery
+from phases.phase5_alignment.adl_alignment import parse_adl_intervals
+from phases.phase5_alignment.compute_hrv_recovery import align_windows_to_hrv_recovery, align_windows_to_hrv_recovery_rr
 from phases.phase4_fusion.run_fusion import main as run_fusion
 from phases.phase6_feature_selection.feature_selection_and_qc import main as run_feature_selection
 
@@ -39,9 +42,14 @@ def run_pipeline(config_path: str) -> None:
     overlap = float(cfg["windowing"]["overlap"])
     win_lengths = cfg["windowing"]["window_lengths_sec"]
     
-    # Get target type and RR path from config
+    # Get target type, RR path, ADL offset, and recovery params from config
     target_type = cfg.get("targets", {}).get("target_type", "borg")
     rr_path = cfg.get("targets", {}).get("imu", {}).get("rr_path", None)
+    rmssd_windows_path = cfg.get("targets", {}).get("imu", {}).get("rmssd_windows_path", None)
+    adl_offset_hours = float(cfg.get("targets", {}).get("imu", {}).get("adl_offset_hours", 0.0))
+    rec_cfg = cfg.get("targets", {}).get("recovery", {})
+    rec_start = float(rec_cfg.get("rec_start", 10.0))
+    rec_end = float(rec_cfg.get("rec_end", 60.0))
 
     for dataset in cfg["datasets"]:
         name = dataset["name"]
@@ -171,8 +179,44 @@ def run_pipeline(config_path: str) -> None:
                 ppg_df = pd.read_csv(ppg_clean_path)
                 print(f"  Saved {ppg_clean_path}")
 
+        # ---------- MODALITY: ECG → RR (optional) ----------
+        # If ECG is provided, process it to extract RR intervals
+        has_ecg = "ecg" in dataset
+        if has_ecg:
+            if "ecg" in cfg["preprocessing"]:
+                print("▶ ECG: preprocessing → extracting RR intervals")
+                ecg_cfg = cfg["preprocessing"]["ecg"]
+
+                ecg_path = dataset["ecg"]["path"]
+                fs_ecg = float(dataset["ecg"].get("fs", 125.0))  # Default 125 Hz for VitalNK
+
+                ecg_out_dir = ds_out / "ecg"
+                ecg_out_dir.mkdir(parents=True, exist_ok=True)
+
+                # Output goes to rr_preprocessed.csv (same format as RR modality)
+                rr_out_dir = ds_out / "rr"
+                rr_out_dir.mkdir(parents=True, exist_ok=True)
+                rr_clean_path = rr_out_dir / "rr_preprocessed.csv"
+                
+                if rr_clean_path.exists():
+                    print(f"  RR intervals already exist: {rr_clean_path}")
+                else:
+                    preprocess_ecg(
+                        in_path=ecg_path,
+                        out_path=str(rr_clean_path),
+                        time_col=ecg_cfg.get("time_col", "time"),
+                        ecg_col=ecg_cfg.get("ecg_col", "ecg"),
+                        fs=fs_ecg,
+                        min_rr_ms=ecg_cfg.get("min_rr_ms", 300),
+                        max_rr_ms=ecg_cfg.get("max_rr_ms", 2000),
+                    )
+                    print(f"  ECG → RR intervals saved: {rr_clean_path}")
+                
+                # Mark that we now have RR data (from ECG)
+                has_rr = True
+
         # ---------- MODALITY: RR (optional) ----------
-        has_rr = "rr" in dataset
+        has_rr = "rr" in dataset or has_ecg
         if has_rr:
             if "rr" in cfg["preprocessing"] and "rr" in cfg["features"]:
                 print("▶ RR: preprocessing")
@@ -265,6 +309,10 @@ def run_pipeline(config_path: str) -> None:
                     out_path=str(imu_aligned_path),
                     target_type=target_type,
                     rr_path=Path(rr_path) if rr_path else None,
+                    rmssd_windows_path=Path(rmssd_windows_path) if rmssd_windows_path else None,
+                    rec_start=rec_start,
+                    rec_end=rec_end,
+                    adl_offset_hours=adl_offset_hours,
                 )
 
             # ---- PPG variants windows/features/QC/alignment ----
@@ -320,6 +368,10 @@ def run_pipeline(config_path: str) -> None:
                         out_path=str(ppg_aligned_path),
                         target_type=target_type,
                         rr_path=Path(rr_path) if rr_path else None,
+                        rmssd_windows_path=Path(rmssd_windows_path) if rmssd_windows_path else None,
+                        rec_start=rec_start,
+                        rec_end=rec_end,
+                        adl_offset_hours=adl_offset_hours,
                     )
 
             # ---- RR windows/features/QC/alignment (SKIPPED - non-uniform sampling) ----
@@ -372,6 +424,10 @@ def run_pipeline(config_path: str) -> None:
                         out_path=str(eda_aligned_path),
                         target_type=target_type,
                         rr_path=Path(rr_path) if rr_path else None,
+                        rmssd_windows_path=Path(rmssd_windows_path) if rmssd_windows_path else None,
+                        rec_start=rec_start,
+                        rec_end=rec_end,
+                        adl_offset_hours=adl_offset_hours,
                     )
 
         # ---------- FUSION ----------
@@ -397,38 +453,58 @@ def run_pipeline(config_path: str) -> None:
             
             if fused_feat_path.exists() and not fused_aligned_path.exists():
                 print(f"  Computing HRV recovery rates and aligning fused features ({win_sec:.1f}s windows)...")
-                try:
-                    # Align windows to HRV recovery rates from PPG data
-                    windows_df = pd.read_csv(imu_win_path)
-                    ppg_df = pd.read_csv(ppg_clean_path)
-                    adl_df = pd.read_csv(adl_path)
-                    
-                    aligned_df = align_windows_to_hrv_recovery(
-                        windows_df=windows_df,
-                        ppg_df=ppg_df,
-                        adl_df=adl_df,
-                        fs=32  # PPG sampling frequency
-                    )
-                    
-                    # Merge HRV recovery labels with fused features
-                    fused_df = pd.read_csv(fused_feat_path)
-                    merged_df = fused_df.merge(
-                        aligned_df[['window_id', 'hrv_recovery_rate', 'hrv_baseline', 'hrv_effort', 'hrv_recovery', 'activity_borg']],
-                        on='window_id',
-                        how='inner'  # Only keep windows with HRV labels
-                    )
-                    merged_df.to_csv(fused_aligned_path, index=False)
-                    print(f"  ✓ HRV alignment complete. {len(merged_df)} windows with recovery rates")
-                except Exception as e:
-                    print(f"  ⚠ HRV recovery computation failed: {e}")
-                    print(f"  Falling back to Borg labels...")
-                    # Fallback to old Borg-based alignment
-                    run_alignment(
-                        features_path=str(fused_feat_path),
-                        windows_path=str(imu_win_path),
-                        adl_path=adl_path,
-                        out_path=str(fused_aligned_path),
-                    )
+                # Load windows and ADL data
+                windows_df = pd.read_csv(imu_win_path)
+                
+                # Add window_id if missing (needed for merge)
+                if 'window_id' not in windows_df.columns:
+                    windows_df['window_id'] = windows_df.index
+                
+                adl_df = parse_adl_intervals(adl_path)
+
+                if adl_offset_hours != 0:
+                    delta = adl_offset_hours * 3600.0
+                    adl_df["t_start"] = adl_df["t_start"] + delta
+                    adl_df["t_end"] = adl_df["t_end"] + delta
+                    print(f"  Shifted ADL intervals by {adl_offset_hours} h ({delta:.0f} s)")
+
+                adl_t_start = adl_df["t_start"].min()
+                adl_t_end = adl_df["t_end"].max()
+                windows_before = len(windows_df)
+                windows_df = windows_df[
+                    (windows_df["t_center"] >= adl_t_start) &
+                    (windows_df["t_center"] <= adl_t_end)
+                ].copy()
+
+                print(f"  ADL recording time: {adl_t_start:.1f} to {adl_t_end:.1f}")
+                print(f"  Windows before filtering: {windows_before}")
+                print(f"  Windows in ADL time range: {len(windows_df)}")
+
+                # Use RR-based HRV recovery computation
+                if not rr_path or not Path(rr_path).exists():
+                    raise ValueError(f"RR path required for HRV recovery computation: {rr_path}")
+                
+                aligned_df = align_windows_to_hrv_recovery_rr(
+                    windows=windows_df,
+                    intervals=adl_df,
+                    rr_path=rr_path
+                )
+                
+                # Merge HRV recovery labels with fused features
+                fused_df = pd.read_csv(fused_feat_path)
+                
+                # Build merge columns based on what's available
+                merge_keys = ['window_id'] if 'window_id' in aligned_df.columns else ['start_idx', 'end_idx']
+                hrv_cols = [c for c in ['hrv_recovery_rate', 'activity_borg'] if c in aligned_df.columns]
+                merge_cols = merge_keys + hrv_cols
+                
+                merged_df = fused_df.merge(
+                    aligned_df[merge_cols],
+                    on=merge_keys,
+                    how='inner'  # Only keep windows with HRV labels
+                )
+                merged_df.to_csv(fused_aligned_path, index=False)
+                print(f"  ✓ HRV alignment complete. {len(merged_df)} windows with recovery rates")
         
         # ---------- FEATURE SELECTION + QC ----------
         print("\n▶ Feature selection with correlation pruning + quality checks")
