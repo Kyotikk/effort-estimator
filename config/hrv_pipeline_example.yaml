@@ -1,0 +1,85 @@
+"""
+Sample configuration for HRV recovery estimation pipeline.
+Customize paths, parameters, and analysis settings here.
+"""
+
+# Output directory
+output_dir: ./output/hrv_recovery
+
+# Session identifier (for tracking)
+session_id: parsingsim3_sim_elderly3
+
+# ============================================================================
+# INPUT PATHS
+# ============================================================================
+input_paths:
+  # Green PPG signal (for IBI extraction)
+  ppg_green: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/corsano_wrist_ppg2_green_6/2025-12-04.csv.gz
+  
+  # ADL (Activities of Daily Living) intervals for effort bout definition
+  adl: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/scai_app/ADLs_1.csv
+  
+  # Optional: IMU features (per window) for feature aggregation
+  imu_features: null  # Set to path if available
+  
+  # Optional: EDA features (per window) for feature aggregation
+  eda_features: null  # Set to path if available
+
+# ============================================================================
+# MODULE 1: IBI EXTRACTION
+# ============================================================================
+ibi:
+  time_col: "time"           # Column name for timestamps
+  value_col: "value"         # Column name for PPG signal
+  fs: 32.0                   # Sampling frequency (Hz)
+  distance_ms: 400           # Min distance between peaks (ms)
+  prominence_percentile: 80  # Peak detection prominence (percentile)
+  min_ibi_sec: 0.3           # Min plausible IBI (seconds) → HR 200 bpm
+  max_ibi_sec: 2.0           # Max plausible IBI (seconds) → HR 30 bpm
+  max_ibi_ratio: 1.5         # Max ratio between consecutive IBIs
+
+# ============================================================================
+# MODULE 2: RMSSD WINDOWING
+# ============================================================================
+rmssd:
+  window_len_sec: 60.0  # RMSSD window length (seconds)
+  step_sec: 10.0        # Step between window starts (seconds)
+  min_beats: 10         # Minimum IBIs per window (otherwise NaN)
+
+# ============================================================================
+# MODULE 3: EFFORT BOUT DEFINITION
+# ============================================================================
+bouts:
+  # ADL-based: uses ADL intervals directly
+  # IMU-based (fallback): thresholds on IMU intensity
+  intensity_col: "acc_mag_rms"
+  threshold_percentile: 60.0
+  min_duration_sec: 20.0
+  merge_gap_sec: 5.0
+  time_col: "t_center"
+
+# ============================================================================
+# MODULE 4: HRV RECOVERY LABELS
+# ============================================================================
+labels:
+  # Label computation method
+  label_method: "delta"  # "delta" (Δ RMSSD) or "slope" (recovery slope)
+  
+  # RMSSD at effort end: window before bout_t_end
+  recovery_end_window_sec: 30.0
+  
+  # Recovery interval: [t_end + recovery_start_sec, t_end + recovery_end_sec]
+  recovery_start_sec: 30.0
+  recovery_end_sec: 90.0
+  
+  # Quality control
+  min_recovery_windows: 2
+
+# ============================================================================
+# MODULE 6: TRAINING
+# ============================================================================
+training:
+  target_col: "delta_rmssd"  # Target variable: "delta_rmssd" or "recovery_slope"
+  test_size: 0.2             # Test set fraction
+  random_state: 42
+  xgboost_n_estimators: 100
