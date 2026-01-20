@@ -1,7 +1,5 @@
-"""
-Sample configuration for HRV recovery estimation pipeline.
-Customize paths, parameters, and analysis settings here.
-"""
+# Sample configuration for HRV recovery estimation pipeline.
+# Customize paths, parameters, and analysis settings here.
 
 # Output directory
 output_dir: ./output/hrv_recovery

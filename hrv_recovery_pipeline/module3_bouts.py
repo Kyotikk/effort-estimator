@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
+import gzip
 
 logger = logging.getLogger(__name__)
 
@@ -95,10 +96,10 @@ def parse_adl_intervals(adl_path: Path, format: str = 'auto') -> pd.DataFrame:
     
     Supports two formats:
     1. Standard: columns [t_start, t_end, task_name]
-    2. SCAI: Start/End pairs with Time, ADLs, Effort columns
+    2. SCAI: Start/End pairs with time, ADLs columns
     
     Args:
-        adl_path: Path to ADL CSV
+        adl_path: Path to ADL CSV (can be .gz compressed)
         format: 'auto', 'standard', or 'scai'
         
     Returns:
@@ -108,23 +109,78 @@ def parse_adl_intervals(adl_path: Path, format: str = 'auto') -> pd.DataFrame:
         logger.warning(f"ADL file not found: {adl_path}")
         return pd.DataFrame()
     
+    # Determine if file is compressed
+    is_compressed = str(adl_path).endswith('.gz')
+    
     # Try SCAI format first if auto-detect
     if format == 'auto' or format == 'scai':
         try:
             # Peek at file to check format
-            with open(adl_path) as f:
-                first_lines = [next(f) for _ in range(5)]
+            if is_compressed:
+                with gzip.open(adl_path, 'rt') as f:
+                    first_lines = [next(f) for _ in range(min(5, sum(1 for _ in gzip.open(adl_path, 'rt'))))]
+            else:
+                with open(adl_path) as f:
+                    first_lines = [next(f) for _ in range(5)]
             
-            # SCAI format has "User ID:" in first line
-            if 'User ID:' in first_lines[0]:
-                logger.info("Detected SCAI ADL format")
+            # Check for SCAI format markers
+            header = first_lines[0].lower()
+            
+            # Old SCAI format has "User ID:" in first line
+            if 'user id:' in header:
+                logger.info("Detected SCAI ADL format (with header)")
                 return parse_scai_adl_format(adl_path)
+            
+            # New SCAI format: "time,ADLs" with Start/End pairs
+            if 'time,adls' in header or ('time' in header and 'adls' in header):
+                logger.info("Detected SCAI ADL format (time,ADLs)")
+                try:
+                    compression = 'gzip' if is_compressed else None
+                    df = pd.read_csv(adl_path, compression=compression)
+                    
+                    # Parse Start/End pairs from time,ADLs format
+                    bouts = []
+                    i = 0
+                    while i < len(df) - 1:
+                        row = df.iloc[i]
+                        adl = row['ADLs']
+                        
+                        if isinstance(adl, str) and 'Start' in adl:
+                            task_base = adl.replace(' Start', '')
+                            next_row = df.iloc[i + 1]
+                            next_adl = next_row['ADLs']
+                            
+                            if isinstance(next_adl, str) and next_adl == f"{task_base} End":
+                                t_start = row['time']
+                                t_end = next_row['time']
+                                
+                                # Extract effort if column exists
+                                effort = next_row.get('Effort', None) if 'Effort' in df.columns else None
+                                
+                                bouts.append({
+                                    't_start': t_start,
+                                    't_end': t_end,
+                                    'duration_sec': t_end - t_start,
+                                    'task_name': task_base,
+                                    'effort': effort if pd.notna(effort) else None
+                                })
+                                
+                                i += 2
+                                continue
+                        i += 1
+                    
+                    bouts_df = pd.DataFrame(bouts)
+                    logger.info(f"Parsed {len(bouts_df)} effort bouts from SCAI format")
+                    return bouts_df
+                except Exception as e:
+                    logger.warning(f"Failed to parse as SCAI time,ADLs format: {e}")
         except Exception as e:
             logger.debug(f"SCAI format check failed: {e}")
     
     # Try standard format
     try:
-        adl_df = pd.read_csv(adl_path)
+        compression = 'gzip' if is_compressed else None
+        adl_df = pd.read_csv(adl_path, compression=compression)
     except Exception as e:
         logger.error(f"Failed to parse ADL file: {e}")
         return pd.DataFrame()
