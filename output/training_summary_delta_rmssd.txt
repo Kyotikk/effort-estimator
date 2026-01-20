@@ -1,0 +1,20 @@
+HRV Recovery Estimation - Training Summary
+Target: delta_rmssd
+Samples: 27
+Features: 256
+
+ElasticNet Metrics:
+  mae_train: 0.0181
+  mae_test: 0.0998
+  r2_train: 0.9531
+  r2_test: 0.2612
+  r_pearson: 0.5267
+  p_pearson: 0.2830
+
+XGBoost Metrics:
+  mae_train: 0.0023
+  mae_test: 0.1302
+  r2_train: 0.9986
+  r2_test: -0.1710
+  r_pearson: -0.2426
+  p_pearson: 0.6432

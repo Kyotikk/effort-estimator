@@ -74,13 +74,17 @@ def prepare_model_data(
         ]
     
     X_cols = [c for c in df.columns if c not in exclude_cols]
-    X = df[X_cols].fillna(X_cols[0] if len(X_cols) > 0 else 0).values
     
-    # Handle NaN columns by filling with median
-    for i, col in enumerate(X_cols):
-        if np.isnan(X[:, i]).any():
-            median_val = np.nanmedian(X[:, i])
-            X[np.isnan(X[:, i]), i] = median_val
+    # Convert to numeric, coerce errors to NaN
+    X_df = df[X_cols].apply(pd.to_numeric, errors='coerce')
+    
+    # Fill NaN with column median
+    X_df = X_df.fillna(X_df.median())
+    
+    # Fill any remaining NaN with 0 (in case entire column is NaN)
+    X_df = X_df.fillna(0)
+    
+    X = X_df.values.astype(np.float64)
     
     logger.info(f"Prepared data: {X.shape[0]} samples × {X.shape[1]} features")
     logger.info(f"  Target {target_col} range: [{y.min():.4f}, {y.max():.4f}]")
