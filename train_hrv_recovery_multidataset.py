@@ -68,8 +68,24 @@ def load_dataset(patient, condition):
         print(f"  ⚠️  No labeled samples with HRV recovery rate in {patient}/{condition}")
         return None, None
     
+    # Clean target: Remove outliers and noise
+    # HRV recovery rate should be reasonable (e.g., -1.0 to 1.0 for normalized values)
+    target_values = df_labeled['hrv_recovery_rate'].values
+    q1, q3 = np.percentile(target_values, [25, 75])
+    iqr = q3 - q1
+    lower_bound = q1 - 3 * iqr  # More aggressive outlier removal (3x IQR)
+    upper_bound = q3 + 3 * iqr
+    
+    clean_mask = (target_values >= lower_bound) & (target_values <= upper_bound)
+    n_removed = (~clean_mask).sum()
+    
+    df_labeled = df_labeled[clean_mask].copy()
+    
+    if n_removed > 0:
+        print(f"  🧹 Removed {n_removed} outlier targets (IQR-based filtering)")
+    
     df_labeled['target'] = df_labeled['hrv_recovery_rate']
-    print(f"  ✓ Using HRV recovery rate: {len(df_labeled)} samples")
+    print(f"  ✓ Using HRV recovery rate: {len(df_labeled)} samples (cleaned)")
     
     if len(df_labeled) == 0:
         print(f"  ⚠️  No labeled samples in {patient}/{condition}")
@@ -82,10 +98,24 @@ def load_dataset(patient, condition):
     
     # Extract feature columns (exclude metadata and target columns)
     meta_cols = ['window_id', 'start_idx', 'end_idx', 't_start', 't_center', 't_end', 
-                 'hrv_recovery_rate', 'target', 'patient', 'condition', 'dataset_id']
-    features = [c for c in df_labeled.columns if c not in meta_cols]
+                 'hrv_recovery_rate', 'target', 'patient', 'condition', 'dataset_id',
+                 'valid', 'n_samples', 'win_sec', 'modality', 'subject', 'borg']
     
-    print(f"  ✓ {patient}/{condition}: {len(df_labeled)} samples, {len(features)} features")
+    # CRITICAL: Filter out ALL HRV-related features to prevent target leakage
+    features = []
+    for c in df_labeled.columns:
+        if c in meta_cols:
+            continue
+        # Skip any HRV metrics that could leak into target
+        c_lower = c.lower()
+        if any(hrv_term in c_lower for hrv_term in ['rmssd', 'pnn50', 'sdnn', 'hrv', 'lfhf', 'lf_hf', 'nn']):
+            continue
+        # Skip lagged metadata columns
+        if c.endswith('_r') or any(c.endswith(f'_r.{i}') for i in range(1, 10)):
+            continue
+        features.append(c)
+    
+    print(f"  ✓ {patient}/{condition}: {len(df_labeled)} samples, {len(features)} features (HRV features excluded)")
     
     return df_labeled, features
 
@@ -126,7 +156,53 @@ def load_all_datasets():
     combined_df = pd.concat(all_dfs, ignore_index=True)
     combined_df = combined_df.sort_values(['dataset_id', 't_center']).reset_index(drop=True)
     
-    print(f"  Total samples: {len(combined_df)}")
+    print(f"  Total samples (before feature filtering): {len(combined_df)}")
+    
+    # Filter out noisy/low-variance features
+    print(f"\n  Feature quality filtering:")
+    feature_cols = [c for c in common_features if c in combined_df.columns]
+    
+    # Remove zero-variance features
+    zero_var = []
+    for col in feature_cols:
+        if combined_df[col].std() == 0 or combined_df[col].var() == 0:
+            zero_var.append(col)
+    
+    if zero_var:
+        common_features = [f for f in common_features if f not in zero_var]
+        print(f"    Removed {len(zero_var)} zero-variance features")
+    
+    # Remove features with >50% missing values
+    high_missing = []
+    for col in common_features:
+        if col in combined_df.columns:
+            missing_pct = combined_df[col].isnull().sum() / len(combined_df)
+            if missing_pct > 0.5:
+                high_missing.append(col)
+    
+    if high_missing:
+        common_features = [f for f in common_features if f not in high_missing]
+        print(f"    Removed {len(high_missing)} high-missing features (>50% missing)")
+    
+    # Remove features with extreme outliers (>5 std devs)
+    extreme_outliers = []
+    for col in common_features:
+        if col in combined_df.columns:
+            values = combined_df[col].dropna()
+            if len(values) > 0:
+                mean_val = values.mean()
+                std_val = values.std()
+                if std_val > 0:
+                    max_z = ((values - mean_val) / std_val).abs().max()
+                    if max_z > 10:  # More than 10 standard deviations
+                        extreme_outliers.append(col)
+    
+    if extreme_outliers:
+        common_features = [f for f in common_features if f not in extreme_outliers]
+        print(f"    Removed {len(extreme_outliers)} features with extreme outliers")
+    
+    print(f"  Total samples (after cleaning): {len(combined_df)}")
+    print(f"  Clean features: {len(common_features)}")
     
     # Show breakdown by dataset
     print(f"\n  Per-dataset breakdown:")
