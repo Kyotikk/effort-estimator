@@ -54,24 +54,54 @@ def extract_rr_intervals(ppg_signal, fs=32, min_distance=15):
     return rr_intervals, peaks
 
 
-def compute_hrv_window(rr_intervals):
+def compute_rmssd(rr_intervals):
     """
-    Compute HRV (Heart Rate Variability) from RR intervals.
+    Compute RMSSD (Root Mean Square of Successive Differences).
     
-    Returns SDNN: Standard deviation of NN intervals (ms)
-    This is the gold-standard HRV metric.
+    RMSSD is the standard HRV metric for parasympathetic activity
+    and is more sensitive to short-term variability than SDNN.
     
     Args:
         rr_intervals: RR intervals in milliseconds (1D array)
         
     Returns:
-        hrv_sdnn: Standard deviation of RR intervals (ms)
+        rmssd: Root mean square of successive RR differences (ms)
     """
     if len(rr_intervals) < 2:
         return np.nan
     
-    hrv = np.std(rr_intervals)
-    return hrv
+    # Successive differences
+    diff = np.diff(rr_intervals)
+    rmssd = np.sqrt(np.mean(diff ** 2))
+    return rmssd
+
+
+def compute_hrv_window(rr_intervals, use_log=True):
+    """
+    Compute HRV (Heart Rate Variability) from RR intervals.
+    
+    Uses RMSSD (Root Mean Square of Successive Differences) which is 
+    more appropriate for recovery analysis than SDNN.
+    
+    When use_log=True, returns ln(RMSSD) which is standard practice
+    in HRV research to normalize the skewed distribution and reduce
+    between-subject variability.
+    
+    Args:
+        rr_intervals: RR intervals in milliseconds (1D array)
+        use_log: If True, return ln(RMSSD) instead of raw RMSSD
+        
+    Returns:
+        hrv: RMSSD or ln(RMSSD) depending on use_log
+    """
+    if len(rr_intervals) < 2:
+        return np.nan
+    
+    rmssd = compute_rmssd(rr_intervals)
+    
+    if use_log and rmssd > 0:
+        return np.log(rmssd)  # ln(RMSSD)
+    return rmssd
 
 
 def compute_hrv_recovery_rate(ppg_signal_baseline, ppg_signal_activity, 
@@ -403,12 +433,13 @@ def align_windows_to_hrv_recovery_rr(windows, intervals, rr_path):
         if len(activity_rr) < 5:
             continue
         
-        # Compute HRV for each phase
-        hrv_activity = compute_hrv_window(activity_rr)
-        hrv_recovery = compute_hrv_window(recovery_rr)
+        # Compute HRV for each phase using ln(RMSSD)
+        hrv_activity = compute_hrv_window(activity_rr, use_log=True)
+        hrv_recovery = compute_hrv_window(recovery_rr, use_log=True)
         
-        # Recovery rate: how fast HRV changes per second
-        hrv_change = hrv_recovery - hrv_activity  # ms
+        # Recovery rate: how fast ln(RMSSD) changes per second
+        # This is more normalized across subjects than raw RMSSD change
+        hrv_change = hrv_recovery - hrv_activity  # ln units
         recovery_time_sec = (recovery_end - recovery_start)  # seconds
         hrv_recovery_rate = hrv_change / recovery_time_sec
         
@@ -422,8 +453,8 @@ def align_windows_to_hrv_recovery_rr(windows, intervals, rr_path):
         if n_assigned > 0:
             windows_labeled.loc[recovery_mask, 'hrv_recovery_rate'] = hrv_recovery_rate
             print(f"  ✓ Activity {idx} (Borg {borg}): "
-                  f"HRV_Recovery_Rate={hrv_recovery_rate:.3f} ms/s "
-                  f"({hrv_activity:.1f}→{hrv_recovery:.1f} ms), "
+                  f"HRV_Recovery_Rate={hrv_recovery_rate:.4f} ln/s "
+                  f"(ln(RMSSD): {hrv_activity:.2f}→{hrv_recovery:.2f}), "
                   f"assigned to {n_assigned} windows")
             successful_labels += 1
     

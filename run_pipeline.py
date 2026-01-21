@@ -470,13 +470,14 @@ def run_pipeline(config_path: str) -> None:
 
                 adl_t_start = adl_df["t_start"].min()
                 adl_t_end = adl_df["t_end"].max()
+                recovery_buffer = 300  # 5 minutes for HRV recovery phase
                 windows_before = len(windows_df)
                 windows_df = windows_df[
                     (windows_df["t_center"] >= adl_t_start) &
-                    (windows_df["t_center"] <= adl_t_end)
+                    (windows_df["t_center"] <= adl_t_end + recovery_buffer)
                 ].copy()
 
-                print(f"  ADL recording time: {adl_t_start:.1f} to {adl_t_end:.1f}")
+                print(f"  ADL recording time: {adl_t_start:.1f} to {adl_t_end:.1f} (+{recovery_buffer}s recovery buffer)")
                 print(f"  Windows before filtering: {windows_before}")
                 print(f"  Windows in ADL time range: {len(windows_df)}")
 

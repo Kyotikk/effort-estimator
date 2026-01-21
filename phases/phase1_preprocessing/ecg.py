@@ -111,41 +111,11 @@ def convert_hr_to_rr(t: np.ndarray, hr: np.ndarray, min_rr: float = 300, max_rr:
     return t_valid[rr_mask], rr_intervals[rr_mask]
 
 
-def detect_r_peaks_simple(signal: np.ndarray, t: np.ndarray, fs: float, min_rr: float = 300, max_rr: float = 2000) -> Tuple[np.ndarray, np.ndarray]:
-    """Simple R-peak detection"""
-    from scipy.signal import find_peaks
+def detect_r_peaks_simple(ecg_signal: np.ndarray, fs: float, min_rr_ms: float = 300) -> np.ndarray:
+    """Simple R-peak detection - returns indices"""
+    from scipy.signal import find_peaks, detrend, butter, filtfilt
     
-    # Normalize
-    signal_norm = (signal - np.mean(signal)) / (np.std(signal) + 1e-6)
-    
-    # Find peaks
-    min_distance = max(1, int((min_rr / 1000.0) * fs))
-    peaks, _ = find_peaks(np.abs(signal_norm), distance=min_distance, height=0.3)
-    
-    if len(peaks) < 2:
-        raise ValueError(f"Only {len(peaks)} peaks detected")
-    
-    r_times = t[peaks]
-    rr_intervals = np.diff(r_times) * 1000.0
-    rr_times = r_times[:-1] + np.diff(r_times) / 2
-    
-    # Filter bounds
-    rr_mask = (rr_intervals >= min_rr) & (rr_intervals <= max_rr)
-    
-    return rr_times[rr_mask], rr_intervals[rr_mask]
-    """
-    Detect R-peaks in ECG signal using adaptive thresholding.
-    
-    Args:
-        ecg_signal: ECG signal values
-        fs: Sampling frequency in Hz
-        min_rr_ms: Minimum RR interval in ms (default 300ms = HR < 200 bpm)
-    
-    Returns:
-        Array of R-peak indices
-    """
     # Detrend and normalize the signal
-    from scipy.signal import detrend
     ecg_detrended = detrend(ecg_signal)
     ecg_norm = ecg_detrended / (np.std(ecg_detrended) + 1e-6)
     
@@ -159,36 +129,32 @@ def detect_r_peaks_simple(signal: np.ndarray, t: np.ndarray, fs: float, min_rr: 
     else:
         ecg_filtered = ecg_norm
     
-    # Square the signal to emphasize peaks
+    # Square and integrate
     ecg_squared = ecg_filtered ** 2
-    
-    # Moving average window (~200ms)
     window_size = max(1, int(0.2 * fs))
     kernel = np.ones(window_size) / window_size
     ecg_integrated = np.convolve(ecg_squared, kernel, mode='same')
     
-    # Find peaks with minimum distance based on physiological constraints
+    # Adaptive threshold
     min_distance = int((min_rr_ms / 1000.0) * fs)
-    
-    # Adaptive threshold: median + 1.5*MAD (more aggressive than before)
     median = np.median(ecg_integrated)
     mad = np.median(np.abs(ecg_integrated - median))
     threshold = median + 1.5 * mad
     
-    # If threshold is too high, use percentile-based approach
     if threshold < np.percentile(ecg_integrated, 30):
         threshold = np.percentile(ecg_integrated, 60)
     
-    peaks, _ = find_peaks(ecg_integrated, 
-                          height=threshold,
-                          distance=min_distance)
+    # Find peaks
+    peaks, _ = find_peaks(ecg_integrated, height=threshold, distance=min_distance)
     
-    # If we still don't have enough peaks, try with even lower threshold
     if len(peaks) < 10:
         threshold = np.percentile(ecg_integrated, 50)
-        peaks, _ = find_peaks(ecg_integrated,
-                              height=threshold,
-                              distance=min_distance)
+        peaks, _ = find_peaks(ecg_integrated, height=threshold, distance=min_distance)
+    
+    if len(peaks) < 2:
+        raise ValueError(f"Only {len(peaks)} R-peaks detected")
+    
+    return peaks
 
 
 def compute_rr_intervals(r_peak_times: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -290,8 +256,8 @@ def preprocess_ecg(
     
     print(f"  ECG loaded: {len(t)} samples, {len(t)/fs:.1f} seconds @ {fs} Hz")
     
-    # Detect R-peaks
-    r_peak_indices = detect_r_peaks(ecg, fs, min_rr_ms)
+    # Detect R-peaks (returns indices)
+    r_peak_indices = detect_r_peaks_simple(ecg, fs, min_rr_ms)
     r_peak_times = t[r_peak_indices]
     
     print(f"  R-peaks detected: {len(r_peak_times)}")
