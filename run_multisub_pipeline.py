@@ -254,9 +254,13 @@ def generate_config(subject):
                 "imu_bioz": f"{output_dir}/parsingsim3_{subject}/imu_bioz/imu_features_{{window_length}}.csv",
                 "imu_wrist": f"{output_dir}/parsingsim3_{subject}/imu_wrist/imu_features_{{window_length}}.csv",
                 "ppg_green": f"{output_dir}/parsingsim3_{subject}/ppg_green/ppg_green_features_{{window_length}}.csv",
+                "ppg_green_hrv": f"{output_dir}/parsingsim3_{subject}/ppg_green/ppg_green_hrv_features_{{window_length}}.csv",
                 "ppg_infra": f"{output_dir}/parsingsim3_{subject}/ppg_infra/ppg_infra_features_{{window_length}}.csv",
+                "ppg_infra_hrv": f"{output_dir}/parsingsim3_{subject}/ppg_infra/ppg_infra_hrv_features_{{window_length}}.csv",
                 "ppg_red": f"{output_dir}/parsingsim3_{subject}/ppg_red/ppg_red_features_{{window_length}}.csv",
+                "ppg_red_hrv": f"{output_dir}/parsingsim3_{subject}/ppg_red/ppg_red_hrv_features_{{window_length}}.csv",
                 "eda": f"{output_dir}/parsingsim3_{subject}/eda/eda_features_{{window_length}}.csv",
+                "eda_advanced": f"{output_dir}/parsingsim3_{subject}/eda/eda_advanced_features_{{window_length}}.csv",
             },
         },
         "logging": {

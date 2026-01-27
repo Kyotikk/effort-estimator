@@ -14,6 +14,8 @@ from preprocessing.rr import preprocess_rr
 
 from windowing.windows import create_windows
 from features.manual_features_imu import compute_top_imu_features_from_windows
+from features.hrv_features import extract_hrv_features
+from features.eda_advanced_features import extract_eda_advanced_features
 
 from ml.targets.run_target_alignment import run_alignment
 from ml.run_fusion import main as run_fusion
@@ -328,6 +330,26 @@ def run_pipeline(config_path: str) -> None:
 
                 run_qc(ppg_feat_path, qc_root / f"quality_{ppg_key}_{win_sec:.1f}s_{int(overlap*100)}ol")
 
+                # ---- HRV features from PPG (HR, RMSSD, SDNN, etc.) ----
+                hrv_feat_path = ppg_out_dir_local / f"{ppg_key}_hrv_features_{win_sec:.1f}s.csv"
+                if not hrv_feat_path.exists():
+                    print(f"  Extracting HRV features from {ppg_key}...")
+                    extract_hrv_features(
+                        ppg_csv=str(ppg_clean_path_local),
+                        windows_csv=str(ppg_win_path),
+                        out_path=str(hrv_feat_path),
+                        time_col=feat_cfg_ppg_local.get("time_col", "t_sec"),
+                        signal_col=feat_cfg_ppg_local.get("signal_col", "value"),
+                        fs=fs_ppg_local,
+                        prefix=f"{ppg_key}_",
+                    )
+                    tmp = pd.read_csv(hrv_feat_path)
+                    tmp = _ensure_modality_col(tmp, f"{ppg_key}_hrv")
+                    tmp.to_csv(hrv_feat_path, index=False)
+                    print(f"    ✓ HRV features: {len(tmp)} windows")
+                
+                run_qc(hrv_feat_path, qc_root / f"quality_{ppg_key}_hrv_{win_sec:.1f}s_{int(overlap*100)}ol")
+
                 ppg_aligned_path = ppg_out_dir_local / f"{ppg_key}_aligned_{win_sec:.1f}s.csv"
                 if not ppg_aligned_path.exists():
                     run_alignment(
@@ -335,6 +357,16 @@ def run_pipeline(config_path: str) -> None:
                         windows_path=str(ppg_win_path),
                         adl_path=adl_path,
                         out_path=str(ppg_aligned_path),
+                    )
+                
+                # Align HRV features separately
+                hrv_aligned_path = ppg_out_dir_local / f"{ppg_key}_hrv_aligned_{win_sec:.1f}s.csv"
+                if not hrv_aligned_path.exists():
+                    run_alignment(
+                        features_path=str(hrv_feat_path),
+                        windows_path=str(ppg_win_path),
+                        adl_path=adl_path,
+                        out_path=str(hrv_aligned_path),
                     )
 
             # ---- RR windows/features/QC/alignment (SKIPPED - non-uniform sampling) ----
@@ -380,6 +412,26 @@ def run_pipeline(config_path: str) -> None:
 
                 run_qc(eda_feat_path, qc_root / f"quality_eda_{win_sec:.1f}s_{int(overlap*100)}ol")
 
+                # ---- Advanced EDA features (SCL, SCR, tonic/phasic) ----
+                eda_adv_feat_path = eda_out_dir / f"eda_advanced_features_{win_sec:.1f}s.csv"
+                if not eda_adv_feat_path.exists():
+                    print(f"  Extracting advanced EDA features (SCL, SCR)...")
+                    extract_eda_advanced_features(
+                        eda_csv=str(eda_clean_path),
+                        windows_csv=str(eda_win_path),
+                        out_path=str(eda_adv_feat_path),
+                        time_col=feat_cfg_eda.get("time_col", "t_sec"),
+                        signal_col=feat_cfg_eda.get("cc_col", "eda_cc"),
+                        fs=fs_eda,
+                        prefix="eda_",
+                    )
+                    tmp = pd.read_csv(eda_adv_feat_path)
+                    tmp = _ensure_modality_col(tmp, "eda_advanced")
+                    tmp.to_csv(eda_adv_feat_path, index=False)
+                    print(f"    ✓ Advanced EDA features: {len(tmp)} windows")
+                
+                run_qc(eda_adv_feat_path, qc_root / f"quality_eda_advanced_{win_sec:.1f}s_{int(overlap*100)}ol")
+
                 eda_aligned_path = eda_out_dir / f"eda_aligned_{win_sec:.1f}s.csv"
                 if not eda_aligned_path.exists():
                     run_alignment(
@@ -387,6 +439,16 @@ def run_pipeline(config_path: str) -> None:
                         windows_path=str(eda_win_path),
                         adl_path=adl_path,
                         out_path=str(eda_aligned_path),
+                    )
+                
+                # Align advanced EDA features
+                eda_adv_aligned_path = eda_out_dir / f"eda_advanced_aligned_{win_sec:.1f}s.csv"
+                if not eda_adv_aligned_path.exists():
+                    run_alignment(
+                        features_path=str(eda_adv_feat_path),
+                        windows_path=str(eda_win_path),
+                        adl_path=adl_path,
+                        out_path=str(eda_adv_aligned_path),
                     )
 
         # ---------- FUSION ----------
