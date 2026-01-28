@@ -1,0 +1,7 @@
+feature,reason,value
+eda_scr_amp_mean,nan_ratio>0.1,0.6895306859205776
+eda_scr_amp_std,nan_ratio>0.1,0.6895306859205776
+eda_scr_amp_max,nan_ratio>0.1,0.6895306859205776
+eda_scr_rise_mean,nan_ratio>0.1,0.6895306859205776
+eda_scr_rise_std,nan_ratio>0.1,0.6895306859205776
+eda_scr_recovery_mean,nan_ratio>0.1,0.6895306859205776

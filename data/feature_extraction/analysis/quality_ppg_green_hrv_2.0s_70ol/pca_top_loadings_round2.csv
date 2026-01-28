@@ -1,0 +1,5 @@
+PC,feature,abs_loading
+PC1,ppg_green_n_peaks,0.7071067811865622
+PC1,ppg_green_peak_quality,0.7071067811865328
+PC2,ppg_green_peak_quality,0.7071067811865622
+PC2,ppg_green_n_peaks,0.7071067811865328

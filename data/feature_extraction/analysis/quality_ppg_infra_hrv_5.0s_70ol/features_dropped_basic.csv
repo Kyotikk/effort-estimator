@@ -1,0 +1,17 @@
+feature,reason,value
+ppg_infra_lf_power,nan_ratio>0.1,0.596028880866426
+ppg_infra_hf_power,nan_ratio>0.1,0.596028880866426
+ppg_infra_total_power,nan_ratio>0.1,0.596028880866426
+ppg_infra_sdsd,nan_ratio>0.1,0.3310469314079422
+ppg_infra_hr_mean,nan_ratio>0.1,0.11299638989169675
+ppg_infra_hr_std,nan_ratio>0.1,0.11299638989169675
+ppg_infra_hr_min,nan_ratio>0.1,0.11299638989169675
+ppg_infra_hr_max,nan_ratio>0.1,0.11299638989169675
+ppg_infra_hr_range,nan_ratio>0.1,0.11299638989169675
+ppg_infra_hr_median,nan_ratio>0.1,0.11299638989169675
+ppg_infra_sdnn,nan_ratio>0.1,0.11299638989169675
+ppg_infra_mean_ibi,nan_ratio>0.1,0.11299638989169675
+ppg_infra_cv_ibi,nan_ratio>0.1,0.11299638989169675
+ppg_infra_rmssd,nan_ratio>0.1,0.11299638989169675
+ppg_infra_pnn50,nan_ratio>0.1,0.11299638989169675
+ppg_infra_pnn20,nan_ratio>0.1,0.11299638989169675

@@ -23,8 +23,10 @@ WINDOW_LENGTH = 10.0
 def find_file(subject_path, pattern_parts, exclude_gz=False):
     """Find a file matching pattern parts in subject directory.
     
-    For multiple matches, prefers the most recently modified file.
-    If exclude_gz=True, prioritizes uncompressed .csv over .csv.gz files.
+    For multiple matches, prefers:
+    1. Files WITHOUT 'rr_interval', 'shifted', 'processed' in name (unless that's the pattern)
+    2. Files ending in just .csv over .csv.gz
+    3. Most recently modified file as tiebreaker
     """
     base = Path(subject_path)
     for i, part in enumerate(pattern_parts):
@@ -46,21 +48,41 @@ def find_file(subject_path, pattern_parts, exclude_gz=False):
     
     # If we end up with a directory, find the actual file inside
     if base.is_dir():
-        if exclude_gz:
-            # Prioritize uncompressed .csv over .csv.gz
-            csv_files = [f for f in base.glob("*.csv") if not str(f).endswith('.csv.gz')]
-            if csv_files:
-                csv_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-                return str(csv_files[0])
+        # Get all CSV files in directory
+        all_csv = list(base.glob("*.csv")) + list(base.glob("*.csv.gz"))
+        
+        if not all_csv:
             return None
         
-        # Standard search: try uncompressed .csv first, then .csv.gz
-        uncompressed = [f for f in base.glob("*.csv") if not str(f).endswith('.csv.gz')]
+        # Filter out derived/processed files (prefer raw data)
+        # These patterns indicate derived files, not raw sensor data
+        derived_patterns = ['rr_interval', 'shifted', 'processed', 'result', 'peak', 'baevsky']
+        
+        def is_raw_data(f):
+            fname = f.name.lower()
+            return not any(p in fname for p in derived_patterns)
+        
+        raw_files = [f for f in all_csv if is_raw_data(f)]
+        
+        # If we have raw files, use those; otherwise fall back to all files
+        candidates = raw_files if raw_files else all_csv
+        
+        if exclude_gz:
+            # Prioritize uncompressed .csv over .csv.gz
+            uncompressed = [f for f in candidates if not str(f).endswith('.csv.gz')]
+            if uncompressed:
+                uncompressed.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+                return str(uncompressed[0])
+            return None
+        
+        # Standard: prefer uncompressed, then compressed
+        uncompressed = [f for f in candidates if not str(f).endswith('.csv.gz')]
         if uncompressed:
             uncompressed.sort(key=lambda x: x.stat().st_mtime, reverse=True)
             return str(uncompressed[0])
         
-        gz_files = sorted(base.glob("*.csv.gz"), key=lambda x: x.stat().st_mtime, reverse=True)
+        gz_files = sorted([f for f in candidates if str(f).endswith('.csv.gz')], 
+                         key=lambda x: x.stat().st_mtime, reverse=True)
         if gz_files:
             return str(gz_files[0])
         

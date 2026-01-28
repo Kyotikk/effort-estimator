@@ -8,10 +8,7 @@ from ml.targets.adl_alignment import (
 )
 
 FUSION_REQUIRED_COLS = [
-    "window_id",
-    "t_start",
-    "t_center",
-    "t_end",
+    "t_center",  # window_id, t_start, t_end are optional (for simplified fusion)
     "modality",
     "borg",
 ]
@@ -65,10 +62,11 @@ def run_alignment(
 
     # -------------------------
     # Choose merge keys
-    # Prefer start_idx/end_idx; fallback to window_id
+    # Prefer start_idx/end_idx; fallback to window_id; final fallback to t_center
     # -------------------------
     have_se = {"start_idx", "end_idx"}.issubset(features.columns) and {"start_idx", "end_idx"}.issubset(windows_labeled.columns)
     have_wid = ("window_id" in features.columns) and ("window_id" in windows_labeled.columns)
+    have_tcenter = ("t_center" in features.columns) and ("t_center" in windows_labeled.columns)
 
     if have_se:
         merge_keys = ["start_idx", "end_idx"]
@@ -76,10 +74,12 @@ def run_alignment(
     elif have_wid:
         merge_keys = ["window_id"]
         meta_cols = ["window_id", "t_start", "t_center", "t_end", "borg"]
+    elif have_tcenter:
+        merge_keys = ["t_center"]
+        meta_cols = ["t_center", "borg"]
     else:
         raise ValueError(
-            "Cannot align: need either start_idx/end_idx in BOTH features & windows, "
-            "or window_id in BOTH.\n"
+            "Cannot align: need either start_idx/end_idx, window_id, or t_center in BOTH features & windows.\n"
             f"Features cols: {list(features.columns)}\n"
             f"Windows cols: {list(windows_labeled.columns)}"
         )
@@ -99,11 +99,24 @@ def run_alignment(
             (features['t_center'] <= adl_t_end)
         ].copy()
 
-    Xy = features.merge(
-        windows_labeled[meta_cols],
-        on=merge_keys,
-        how="left",
-    )
+    # Perform merge based on available keys
+    if merge_keys == ["t_center"]:
+        # Use merge_asof for time-based join with tolerance
+        features = features.sort_values('t_center').reset_index(drop=True)
+        windows_labeled = windows_labeled.sort_values('t_center').reset_index(drop=True)
+        Xy = pd.merge_asof(
+            features,
+            windows_labeled[meta_cols],
+            on='t_center',
+            direction='nearest',
+            tolerance=5.0,  # 5 second tolerance
+        )
+    else:
+        Xy = features.merge(
+            windows_labeled[meta_cols],
+            on=merge_keys,
+            how="left",
+        )
 
     # Ensure modality exists (fusion requires it)
     if "modality" not in Xy.columns:
