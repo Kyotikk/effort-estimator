@@ -1,0 +1,12 @@
+feature,pca_energy_score
+ppg_infra_hr_range,0.2654806253330786
+ppg_infra_hr_std,0.26357430385794006
+ppg_infra_hr_min,0.2464626712200086
+ppg_infra_pnn20,0.23634859173021439
+ppg_infra_rmssd,0.23427000439184054
+ppg_infra_mean_ibi,0.22747103796013282
+ppg_infra_pnn50,0.22627233625330354
+ppg_infra_cv_ibi,0.22479648425367996
+ppg_infra_n_peaks,0.2232377777696678
+ppg_infra_hr_max,0.19920810377931747
+ppg_infra_peak_quality,0.16298613972127945

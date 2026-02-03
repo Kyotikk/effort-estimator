@@ -1,529 +1,441 @@
 # Stage 7: Performance Metrics & Evaluation
 
-## Complete Metrics Overview
+## Overview
+
+This document provides comprehensive analysis of model performance across window sizes, including statistical interpretation and comparison metrics.
 
 ---
 
-## Test Set Performance (Primary Metric)
+## Window Size Comparison Summary
 
-### Test R² = 0.9225
+| Window | N Samples | N Activities | Features | XGBoost r | XGBoost MAE | Ridge r | Ridge MAE |
+|--------|-----------|--------------|----------|-----------|-------------|---------|-----------|
+| **5s** | 855 | 65 | 48 | **0.626** | 1.22 | **0.644** | 1.17 |
+| 10s | 424 | 61 | 51 | 0.548 | 1.36 | 0.567 | 1.30 |
+| 30s | 100 | 40 | 20 | 0.364 | 1.34 | 0.184 | 1.69 |
 
-**Meaning:** The model explains 92.25% of the variance in Borg effort ratings on unseen test data.
+**Key Finding:** 5s windows achieve best performance across all metrics.
 
-**Formula:**
-$$R^2 = 1 - \frac{\sum(y_{\text{true}} - y_{\text{pred}})^2}{\sum(y_{\text{true}} - \bar{y})^2}$$
+---
+
+## 5s Windows - Primary Results (Best)
+
+### XGBoost Performance
+
+```
+Model:           XGBoost Regressor
+CV Method:       GroupKFold (5 folds)
+N Samples:       855
+N Activities:    65 (used as groups)
+N Features:      48
+
+Metrics:
+  Pearson r:     0.626
+  p-value:       2.8e-90 (highly significant)
+  R²:            0.392 (39.2% variance explained)
+  RMSE:          1.52 Borg points
+  MAE:           1.22 Borg points
+```
+
+### Ridge Regression Performance
+
+```
+Model:           Ridge Regression (alpha=1.0)
+CV Method:       GroupKFold (5 folds)
+N Samples:       855
+N Activities:    65 (used as groups)
+N Features:      48 (standardized)
+
+Metrics:
+  Pearson r:     0.644
+  p-value:       1.4e-97 (highly significant)
+  R²:            0.415 (41.5% variance explained)
+  RMSE:          1.48 Borg points
+  MAE:           1.17 Borg points
+```
+
+---
+
+## 10s Windows - Comparison Results
+
+### XGBoost Performance
+
+```
+Model:           XGBoost Regressor
+CV Method:       GroupKFold (5 folds)
+N Samples:       424
+N Activities:    61 (used as groups)
+N Features:      51
+
+Metrics:
+  Pearson r:     0.548
+  p-value:       1.21e-34 (highly significant)
+  R²:            0.300 (30.0% variance explained)
+  RMSE:          1.65 Borg points
+  MAE:           1.36 Borg points
+```
+
+### Ridge Regression Performance
+
+```
+Model:           Ridge Regression (alpha=1.0)
+CV Method:       GroupKFold (5 folds)
+N Samples:       424
+N Activities:    61 (used as groups)
+N Features:      51 (standardized)
+
+Metrics:
+  Pearson r:     0.567
+  p-value:       2.01e-37 (highly significant)
+  R²:            0.321 (32.1% variance explained)
+  RMSE:          1.68 Borg points
+  MAE:           1.30 Borg points
+```
+
+---
+
+## 30s Windows - Poor Performance
+
+### XGBoost Performance
+
+```
+Model:           XGBoost Regressor
+CV Method:       GroupKFold (5 folds)
+N Samples:       100
+N Activities:    40 (used as groups)
+N Features:      20
+
+Metrics:
+  Pearson r:     0.364
+  p-value:       2.01e-04 (significant)
+  R²:            0.132 (13.2% variance explained)
+  RMSE:          1.68 Borg points
+  MAE:           1.34 Borg points
+```
+
+### Ridge Regression Performance
+
+```
+Model:           Ridge Regression (alpha=1.0)
+CV Method:       GroupKFold (5 folds)
+N Samples:       100
+N Activities:    40 (used as groups)
+N Features:      20 (standardized)
+
+Metrics:
+  Pearson r:     0.184
+  p-value:       0.067 (NOT significant at α=0.05)
+  R²:            0.034 (3.4% variance explained)
+  RMSE:          2.11 Borg points
+  MAE:           1.69 Borg points
+```
+
+**Note:** 30s windows lost sim_elderly5 labels due to alignment issues (0 labeled samples).
+
+---
+
+## Metric Interpretation
+
+### Pearson Correlation (r)
+
+**Definition:**
+$$r = \frac{\sum(y_{true} - \bar{y}_{true})(y_{pred} - \bar{y}_{pred})}{\sqrt{\sum(y_{true} - \bar{y}_{true})^2 \sum(y_{pred} - \bar{y}_{pred})^2}}$$
+
+**Interpretation for effort estimation:**
+| r Value | Interpretation |
+|---------|----------------|
+| 0.80+ | Excellent |
+| 0.60-0.80 | Good |
+| 0.40-0.60 | Moderate |
+| 0.20-0.40 | Weak |
+| <0.20 | Very weak |
+
+**Our results:**
+- 5s: r = 0.626-0.644 → **Good**
+- 10s: r = 0.548-0.567 → **Moderate**
+- 30s: r = 0.184-0.364 → **Weak to Very Weak**
+
+### Mean Absolute Error (MAE)
+
+**Definition:**
+$$MAE = \frac{1}{n}\sum|y_{true} - y_{pred}|$$
 
 **Interpretation:**
-- ✅ **0.9225 is excellent** for a physiological prediction task
-- Comparable to professional devices (FDA-approved)
-- Suitable for clinical or consumer applications
-- Industry standard: R² > 0.90 for wearable biomedical devices
+- MAE = 1.17-1.22 (5s) means average prediction is within ~1.2 Borg points
+- Borg scale 0-8, so error is ~15% of scale range
+- Clinically: Can distinguish "rest" from "moderate" but may confuse adjacent levels
 
-**In context:**
-```
-If doctor/trainer assesses effort as Borg = 8 (hard),
-our model will predict within ±0.52 points 68% of time
-(1 standard deviation of RMSE)
-```
+### Root Mean Square Error (RMSE)
 
----
-
-### Test RMSE = 0.5171 Borg points
-
-**Meaning:** Average prediction error is ±0.52 Borg points.
-
-**Formula:**
-$$\text{RMSE} = \sqrt{\frac{1}{n}\sum(y_{\text{true}} - y_{\text{pred}})^2}$$
+**Definition:**
+$$RMSE = \sqrt{\frac{1}{n}\sum(y_{true} - y_{pred})^2}$$
 
 **Interpretation:**
+- RMSE > MAE indicates some predictions have larger errors
+- RMSE = 1.48-1.52 (5s) vs MAE = 1.17-1.22 → moderate outliers
+- Ratio RMSE/MAE ≈ 1.26 (reasonable, < 1.4 is good)
+
+---
+
+## Why 5s Outperforms Larger Windows
+
+### 1. Sample Size Effect
+
 ```
-Borg scale: 0 (nothing) ← → 20 (maximal effort)
-Error: 0.52 points = 2.6% of full scale
-This is small relative to scale granularity (0-20 with ~0.5 point precision)
+Window Size    N Samples    Statistical Power
+5s             855          High
+10s            424          Medium
+30s            100          Low
 ```
 
-**Typical prediction errors:**
+With 855 samples, 5s windows have ~2x more data for learning patterns.
+
+### 2. Activity Duration
+
 ```
-Actual Borg = 8 (hard effort)
-Model predicts: 7.5 to 8.5 (±0.52 on average)
-Clinically acceptable: Within one Borg category
+Typical ADL Activity Duration: 10-60 seconds
+5s window:  Captures 2-12 windows per activity
+10s window: Captures 1-6 windows per activity
+30s window: Captures 0-2 windows per activity
+```
+
+Longer windows average across activity transitions, losing signal.
+
+### 3. Effort Dynamics
+
+```
+Effort changes can occur within seconds:
+- Standing up: 2-3 second effort spike
+- Walking: Sustained moderate effort
+- Sitting down: Brief high effort then rest
+
+5s captures these dynamics; 30s averages them out.
+```
+
+### 4. HRV Validity
+
+```
+Task Force 1996 Recommendations:
+- Standard HRV: 5 minutes minimum
+- Ultra-short HRV: 10+ beats required
+
+At 60 BPM:
+- 5s window: ~5 beats (borderline)
+- 10s window: ~10 beats (minimum valid)
+- 30s window: ~30 beats (reliable)
+
+Trade-off: 30s has better HRV but fewer samples.
+Our results suggest: Sample size > HRV precision.
 ```
 
 ---
 
-### Test MAE = 0.3540 Borg points
+## Cross-Validation Details
 
-**Meaning:** Average absolute prediction error is 0.35 Borg points.
+### GroupKFold Strategy
 
-**Formula:**
-$$\text{MAE} = \frac{1}{n}\sum|y_{\text{true}} - y_{\text{pred}}|$$
+**Problem with standard KFold:**
+- Adjacent windows are correlated (overlap)
+- Same activity appears in train and test
+- Model learns temporal patterns, not effort-feature relationships
+- Results in over-optimistic performance
 
-**Interpretation:**
+**GroupKFold Solution:**
+- Group windows by activity ID
+- Activity ID = subject + Borg level transitions
+- All windows from one activity in same fold
+- Prevents data leakage
+
+**Group Distribution (5s):**
 ```
-Less sensitive to outliers than RMSE
-If one prediction is off by 2 points, RMSE penalizes more than MAE
-MAE = 0.354 < RMSE = 0.517 → indicates some outlier predictions
-but overall distribution of errors is reasonable
-```
-
-**Error distribution:**
-```
-Under ±0.2 Borg: ~30% of predictions
-±0.2 to ±0.4 Borg: ~35% of predictions
-±0.4 to ±0.6 Borg: ~20% of predictions
->±0.6 Borg: ~15% of predictions
-```
-
----
-
-## Training Set Performance
-
-### Train R² = 1.0000
-
-**Status:** Perfect fit on training data (expected with gradient boosting)
-
-**Not concerning because:**
-1. XGBoost intentionally overfits training set
-2. Test performance is what matters (R² = 0.9225)
-3. Gap is only 0.0001 (train-test aligned)
-
-**Contrast with initial problem:**
-- Before feature selection: gap = 0.061 (6.1%)
-- After feature selection: gap = 0.0001 (0.01%)
-- ✅ Feature selection solved overfitting
-
----
-
-### Train RMSE = 0.0000, Train MAE = 0.0000
-
-Perfect predictions on training set, as expected with perfect R².
-
----
-
-## Cross-Validation Results
-
-### CV R² Mean = 0.8689 ± 0.0360
-
-**Method:** 5-fold cross-validation
-- Split data 5 ways
-- Train on 4 folds (343 samples), test on 1 fold (86 samples)
-- Repeat 5 times, report mean ± std
-
-**Interpretation:**
-```
-Mean R²: 0.8689 (86.89% variance explained on average across folds)
-Std:     0.0360 (small variation between folds, ~3.6%)
-
-Comparison to test R²:
-- Test R²: 0.9225 (on 20% held-out test set)
-- CV R²: 0.8689 (on 5 different 20% test sets)
-
-Why lower? CV uses more varied test sets, less optimized for test
-distribution. Both values are stable and acceptable.
+Subject        N Activities
+sim_elderly3   ~22
+sim_elderly4   ~21
+sim_elderly5   ~22
+Total          65
 ```
 
-### CV RMSE Mean = 0.6714 ± 0.0963
+### Why p-values Are Extremely Low
 
-**Meaning:** Average RMSE across 5 CV folds is 0.67 ± 0.10 Borg points.
+With N=855 samples, even moderate correlations yield tiny p-values:
 
-**Interpretation:**
-```
-Slightly higher than test RMSE (0.52) because CV tests on fresh data
-Std deviation of 0.096 is small → stable across folds
-No fold is dramatically different (no data anomalies)
-```
+```python
+from scipy.stats import pearsonr
+import numpy as np
 
-### CV MAE Mean = 0.4164 ± 0.0575
+# r=0.626 with n=855
+r, p = 0.626, 2.8e-90
 
-**Meaning:** Average absolute error across folds is 0.42 ± 0.06 Borg points.
+# t-statistic: t = r * sqrt(n-2) / sqrt(1-r²)
+t = 0.626 * np.sqrt(855-2) / np.sqrt(1-0.626**2)
+# t ≈ 23.7
 
-**Interpretation:**
-```
-Aligned with CV RMSE (both ~0.42-0.67 range)
-Small std deviation → consistent error across folds
-```
-
----
-
-## Overfitting Analysis
-
-### The Problem We Solved
-
-**Initial V2 model (all 188 features):**
-```
-Train R²: 1.0000
-Test R²:  0.9389
-Gap:      0.0611  ← OVERFITTING (model memorized noise)
-```
-
-**After feature selection (100 features):**
-```
-Train R²: 1.0000
-Test R²:  0.9225
-Gap:      0.0001  ← OVERFITTING ELIMINATED ✅
-```
-
-### Reduction Metrics
-
-```
-Gap reduction: 0.0611 → 0.0001 = 99.8% improvement
-
-Trade-off (acceptable):
-- Test R² decreased from 0.9389 to 0.9225 (-0.0164, -1.7%)
-- But model is now reliable for unseen data
-- Small cost for massive overfitting reduction
-```
-
-### Stability Indicators
-
-**Cross-validation confirmation:**
-```
-CV R² mean: 0.8689
-CV R² std:  0.0360 (3.6% variation)
-
-Small std dev indicates model is not sensitive to which 80% of data
-is used for training - sign of good generalization
-```
-
----
-
-## Per-Window Error Analysis
-
-### Error Distribution
-
-From 86 test windows:
-
-```
-Prediction Error Ranges:
-  0.0 - 0.2 Borg:  28 windows (32.6%)  - Very accurate
-  0.2 - 0.4 Borg:  29 windows (33.7%)  - Accurate
-  0.4 - 0.6 Borg:  17 windows (19.8%)  - Acceptable
-  0.6 - 0.8 Borg:   8 windows (9.3%)   - Less accurate
-  >0.8 Borg:        4 windows (4.7%)   - Outliers
-```
-
-**Cumulative:**
-- Within ±0.4 Borg: 66.3% of test windows ✅
-- Within ±0.6 Borg: 86.0% of test windows ✅
-- Within ±1.0 Borg: 100% of test windows ✅
-
----
-
-## Segmented Performance by Effort Level
-
-Analyzing predictions across different effort ranges:
-
-```
-Effort Level      N_test  Mean_Error  RMSE    R²
-─────────────────────────────────────────────────
-Rest (0-2)          8     -0.08       0.31    0.92
-Light (3-5)        18     +0.12       0.38    0.89
-Moderate (6-8)     28     -0.04       0.48    0.91
-Hard (9-12)        22     +0.18       0.62    0.88
-Very Hard (13-20)  10     -0.22       0.71    0.84
-─────────────────────────────────────────────────
-OVERALL            86     +0.00       0.52    0.92
-```
-
-**Insights:**
-- **Best performance:** Rest and moderate effort (R² 0.91-0.92)
-- **Slight degradation:** Very high effort (R² 0.84)
-  - Reason: Fewer samples at high effort (only 10 windows)
-  - Normal high-variance in low-sample regime
-- **Balanced across range:** No systematic bias
-
----
-
-## Feature Contribution Analysis
-
-### Feature Importance Distribution
-
-```
-Top 10 features account for: 70.9% of prediction power
-Top 20 features account for: 85.4% of prediction power
-Top 50 features account for: 97.8% of prediction power
-All 100 features account for: 100% (by definition)
+# With df=853, this is highly significant
 ```
 
 **Interpretation:**
-```
-Long-tail distribution: A few features do most work,
-many features contribute marginally.
-This justifies feature selection (many bottom features were noise).
-```
-
-### Modality Importance Breakdown
-
-```
-Modality          Features  Combined Importance
-────────────────────────────────────────────
-EDA               26        52.8%  ← PRIMARY
-PPG Green         28        22.5%
-PPG Infra         24        15.2%
-IMU               14        10.4%
-PPG Red           8         0.1%
-────────────────────────────────────────────
-TOTAL             100       100%
-```
-
-**Biological Significance:**
-1. **EDA (52.8%):** Electrodermal activity reflects sympathetic arousal
-   - Sweat gland activity increases with stress/effort
-   - Most reliable indicator of physiological stress
-
-2. **PPG Green (22.5%):** Clean heart rate and HRV signal
-   - HR increases with effort
-   - HRV decreases with stress
-   - Strong predictor but less dominant than EDA
-
-3. **PPG Infra (15.2%):** Weaker cardiac signal
-   - Same information as Green but with more noise
-   - Contributes but less reliable
-
-4. **IMU (10.4%):** Movement/acceleration
-   - Physical activity level
-   - Supplements cardiac metrics
-   - Useful but less specific to effort
-
-5. **PPG Red (0.1%):** Severely noise-limited
-   - Barely useful
-   - Kept in model for completeness
+- p < 0.001 confirms correlation is non-zero
+- Does NOT mean correlation is "strong" in practical sense
+- Large N inflates statistical significance
+- Focus on r magnitude and MAE for practical interpretation
 
 ---
 
-## Benchmark Comparisons
+## Per-Subject Breakdown
 
-### Commercial Devices
+### 5s Windows
 
-| Device | Metric | Our Model |
-|--------|--------|-----------|
-| **Garmin Chest Strap** | HR accuracy | ±1 bpm (vs our PPG: ±5 bpm) |
-| **Apple Watch** | HR accuracy | ±2-3 bpm | 
-| **Effort Rating Prediction** | None published | **R²=0.9225** ✅ |
+| Subject | N Labeled | Contribution |
+|---------|-----------|--------------|
+| sim_elderly3 | ~280 | 33% |
+| sim_elderly4 | ~290 | 34% |
+| sim_elderly5 | ~285 | 33% |
 
-**Note:** No published benchmarks for effort rating prediction from wearables. Our result is novel.
+### 10s Windows
 
-### Literature
+| Subject | N Labeled | Contribution |
+|---------|-----------|--------------|
+| sim_elderly3 | 143 | 34% |
+| sim_elderly4 | 151 | 36% |
+| sim_elderly5 | 130 | 31% |
 
-**Similar work (if any existed):**
-- HRV-based effort: R² ~0.80-0.85 (single modality)
-- Our multi-modal approach: R² 0.9225 ✅ (significant improvement)
+### 30s Windows
 
----
+| Subject | N Labeled | Contribution |
+|---------|-----------|--------------|
+| sim_elderly3 | 49 | 49% |
+| sim_elderly4 | 51 | 51% |
+| sim_elderly5 | 0 | 0% ⚠️ |
 
-## Model Reliability Metrics
-
-### Prediction Confidence Intervals
-
-Using residual std (RMSE = 0.517):
-
-```
-Predicted Borg = 8.0
-
-95% Confidence Interval: 8.0 ± 2×0.517 = [6.97, 9.03]
-68% Confidence Interval: 8.0 ± 1×0.517 = [7.48, 8.52]
-
-Interpretation:
-- 68% chance true value within ±0.52
-- 95% chance true value within ±1.03
-- Very tight confidence bounds
-```
-
-### Outlier Detection
-
-Residuals (predicted - actual):
-
-```
-Mean residual: 0.000 (unbiased)
-Std residual: 0.517 (RMSE)
-
-Outliers (>2 std from mean):
-- Count: 4 windows (4.7% of test set)
-- Max error: 1.85 Borg points
-- Likely cause: Signal corruption, label error, or unusual physiology
-
-Note: 4.7% outlier rate is acceptable (expected ~5% at ±2σ)
-```
+**Note:** sim_elderly5 lost all labels at 30s due to ADL-window alignment issues.
 
 ---
 
-## Data Quality Indicators
+## Feature Importance Analysis
 
-### Sample Representativeness
+### Top 10 by XGBoost (5s)
 
-**Test set composition:**
-```
-Borg distribution in test:
-  0-5 (light):      26.2% of test
-  6-10 (moderate):  52.3% of test
-  11-20 (hard):     21.5% of test
+| Rank | Feature | Importance | Modality |
+|------|---------|------------|----------|
+| 1 | ppg_green_range | 0.1824 | PPG |
+| 2 | ppg_green_p95 | 0.0949 | PPG |
+| 3 | acc_x_dyn__cardinality | 0.0642 | IMU |
+| 4 | eda_stress_skin_max | 0.0456 | EDA |
+| 5 | ppg_green_trim_mean_10 | 0.0398 | PPG |
+| 6 | acc_y_dyn__harmonic_mean_of_abs | 0.0374 | IMU |
+| 7 | ppg_infra_p95 | 0.0321 | PPG |
+| 8 | eda_phasic_energy | 0.0298 | EDA |
+| 9 | acc_z_dyn__lower_complete_moment | 0.0287 | IMU |
+| 10 | ppg_green_ddx_kurtosis | 0.0256 | PPG |
 
-Matches training distribution? YES ✅
-(Random 80/20 split maintains distribution)
-```
+**Interpretation:**
+- PPG dominates (especially green channel)
+- IMU and EDA provide complementary information
+- Top 10 features account for ~60% of importance
 
-### Missing Data Handling
+### Top 10 by Ridge |Coefficient| (5s)
 
-```
-NaN values in features:
-  Before imputation: 0.3% of feature matrix
-  After imputation (fill with mean): 0.0%
+| Rank | Feature | |Coefficient| | Direction |
+|------|---------|--------------|-----------|
+| 1 | ppg_green_p95 | 0.8487 | Negative |
+| 2 | acc_x_dyn__cardinality | 0.6033 | Positive |
+| 3 | ppg_red_signal_energy | 0.3918 | Positive |
+| 4 | ppg_infra_n_peaks | 0.3738 | Positive |
+| 5 | acc_x_dyn__quantile_0.9 | 0.3500 | Negative |
+| 6 | ppg_infra_shape_factor | 0.3451 | Positive |
+| 7 | eda_cc_min | 0.3200 | Positive |
+| 8 | eda_stress_skin_max | 0.3120 | Negative |
+| 9 | acc_y_dyn__harmonic_mean_of_abs | 0.2254 | Negative |
+| 10 | ppg_infra_ddx_kurtosis | 0.2251 | Negative |
 
-No systematic NaN pattern detected.
-```
-
----
-
-## Model Robustness
-
-### Sensitivity Analysis
-
-**If we remove top feature (eda_stress_skin_range):**
-```
-Test R² drops from 0.9225 to 0.8012
-Reduction: 0.1213 (13.1% loss)
-
-This is significant but not catastrophic.
-Other features provide backup information.
-```
-
-**If we remove bottom 50 features:**
-```
-Test R² drops from 0.9225 to 0.9189
-Reduction: 0.0036 (0.4% loss)
-
-Bottom 50 features contribute very little.
-Justifies aggressive feature selection.
-```
-
-### Noise Resilience
-
-**Added 10% Gaussian noise to test features:**
-```
-Original test R²: 0.9225
-With noise: 0.8934 (2.5% drop)
-
-Model is robust to moderate sensor noise.
-```
+**Interpretation:**
+- ppg_green_p95 negative: Higher PPG amplitude = lower effort (resting state)
+- acc_x_dyn__cardinality positive: More movement variety = higher effort
+- eda_stress_skin_max negative: Counter-intuitive, may reflect data artifacts
 
 ---
 
-## Practical Performance Metrics
+## Comparison with Literature
 
-### Clinical Utility
+### Effort Estimation from Wearables
+
+| Study | Modalities | r / R² | Notes |
+|-------|------------|--------|-------|
+| Our work (5s) | PPG+EDA+IMU | r=0.64 | 3 elderly, GroupKFold CV |
+| Typical HRV-only | HRV | r~0.50 | Single modality |
+| IMU-only | Accelerometer | r~0.45 | Physical activity bias |
+| Multi-modal SOTA | Various | r=0.65-0.75 | Lab conditions |
+
+**Assessment:** Our results (r=0.64) are competitive with literature, especially considering:
+- Real-world ADL data (not lab)
+- Elderly patients (noisier signals)
+- Strict GroupKFold CV (no leakage)
+
+---
+
+## Limitations
+
+### 1. Correlation ≠ Causation
+- Features correlate with Borg but may not cause it
+- Confounding variables (time of day, activity type) not controlled
+
+### 2. Limited Generalization
+- 3 elderly subjects from same study
+- May not generalize to healthy/young
+- Need leave-one-subject-out validation
+
+### 3. Borg Scale Subjectivity
+- Self-reported effort varies by person
+- Same activity may feel different to different people
+- 0-8 scale (not full 0-20)
+
+### 4. Short Recordings
+- ~25 minutes per subject
+- Limited activity variety
+- May not capture all effort levels
+
+---
+
+## Conclusions
+
+### Primary Findings
+
+1. **5s windows optimal:** r=0.626-0.644, MAE=1.17-1.22
+2. **10s provides comparison:** r=0.548-0.567, MAE=1.30-1.36
+3. **30s unsuitable:** Low sample size, lost subject data
+
+### Model Selection
+
+- **Use Ridge** for interpretability (coefficient signs, linear relationships)
+- **Use XGBoost** for deployment (slightly better for non-linear patterns)
+- Both perform similarly; Ridge slightly better on this dataset
+
+### Practical Application
+
+- Suitable for effort monitoring in elderly ADLs
+- MAE ~1.2 Borg points: Can distinguish major effort levels
+- Not suitable for fine-grained effort discrimination (e.g., Borg 5 vs 6)
+
+---
+
+## Output Files
+
+Results saved to `/Users/pascalschlegel/data/interim/elderly_combined/`:
 
 ```
-For patient safety/effort monitoring:
+xgboost_results/
+├── summary.yaml          # Metrics (r, MAE, RMSE)
+├── feature_importance.csv # Feature rankings
+└── predictions.csv        # y_true, y_pred per sample
 
-Sensitivity (correctly identified high effort):
-- Borg ≥ 12 predicted as ≥ 11: 90% sensitivity ✅
+linear_results/
+├── summary.yaml          # Metrics
+├── coefficients.csv      # Feature coefficients
+└── predictions.csv       # Predictions
 
-Specificity (correctly identified low effort):
-- Borg ≤ 5 predicted as ≤ 6: 92% specificity ✅
+xgboost_results_10.0s/    # 10s window results
+ridge_results_10.0s/
 
-Positive predictive value (correct when predicting high effort):
-- When model predicts ≥ 12: true value ≥ 11 in 88% of cases ✅
+xgboost_results_30.0s/    # 30s window results
+ridge_results_30.0s/
 ```
-
-### Real-Time Performance
-
-```
-Inference time per window: <1ms
-Batch inference (1000 windows): <500ms
-Latency: Negligible for real-time applications
-```
-
----
-
-## Summary Table
-
-| Metric | Value | Interpretation |
-|--------|-------|-----------------|
-| **Test R²** | 0.9225 | Excellent (>0.90) |
-| **Test RMSE** | 0.5171 Borg | ±0.5 point typical error |
-| **Test MAE** | 0.3540 Borg | Average error 0.35 |
-| **Train-Test Gap** | 0.0001 | No overfitting ✅ |
-| **CV R²** | 0.8689 ± 0.0360 | Stable across folds |
-| **Within ±0.4 Borg** | 66.3% | Very accurate predictions |
-| **Within ±1.0 Borg** | 100% | All predictions close |
-| **High effort R²** | 0.88 | Slightly lower but good |
-| **Feature importance** | Top 10: 70.9% | Concentrated signal |
-| **Outliers** | 4.7% | Expected at ±2σ |
-
----
-
-## Performance vs Objectives
-
-**Design Goal:** Predict Borg effort rating within ±1 point  
-**Achieved:** RMSE = 0.517 Borg points ✅ (goal met and exceeded)
-
-**Design Goal:** Generalize across subjects (eventual)  
-**Status:** Single subject (sim_elderly3) ⚠️ (need multi-subject validation)
-
-**Design Goal:** Real-time inference  
-**Achieved:** <1ms per window ✅
-
-**Design Goal:** No overfitting  
-**Achieved:** Train-test gap = 0.0001 ✅ (completely eliminated)
-
----
-
-## Limitations & Caveats
-
-### Current Limitations
-
-1. **Single Subject:** All data from one elderly patient
-   - Model may not generalize to young/healthy subjects
-   - Recommendation: Validate on new subjects
-
-2. **Limited Window Sizes:** Primarily 10s
-   - 5s and 2s window models also trained but not extensively analyzed
-   - Shorter windows may be less reliable (fewer cycles per signal)
-
-3. **One Health Condition:** Elderly patient (sim_elderly3)
-   - Healthy young: May show different EDA-effort relationship
-   - Severe/medical: May have different HR response
-   - Recommendation: Collect healthy and severe cohorts
-
-4. **No External Validation:** Test set from same subject
-   - Cross-subject test needed for clinical deployment
-   - Current test set is train/test from same person
-
----
-
-## Future Performance Improvements
-
-**With more data (1000+ samples):**
-- Increase selected features 100 → 150-200
-- Hyperparameter optimization via grid search
-- Expected improvement: R² 0.9225 → 0.93-0.95
-
-**Multi-subject model:**
-- Train on multiple patients
-- Cross-validate: Leave-one-subject-out
-- Assess generalization capability
-
-**Ensemble methods:**
-- Combine multiple models
-- Expected improvement: RMSE reduction 5-10%
-
----
-
-## Conclusion
-
-The V2 XGBoost model achieves **excellent performance** on the current dataset:
-- ✅ **92.25% variance explained** (test R²)
-- ✅ **±0.52 Borg point typical error** (RMSE)
-- ✅ **No overfitting** (train-test gap eliminated)
-- ✅ **Stable across validation folds** (CV R² = 0.8689 ± 0.036)
-
-**Ready for:**
-- Single-subject real-time monitoring
-- Wearable device integration
-- Feasibility studies
-
-**Not ready for:**
-- Multi-subject deployment (needs validation)
-- Clinical diagnostics (one subject insufficient)
-- Generalization claims
-

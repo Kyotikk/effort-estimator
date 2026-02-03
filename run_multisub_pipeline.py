@@ -209,7 +209,7 @@ def generate_config(subject):
             },
         },
         "windowing": {
-            "overlap": 0.7,
+            "overlap": 0.1,
             "window_lengths_sec": [10.0, 5.0, 2.0],
         },
         "features": {

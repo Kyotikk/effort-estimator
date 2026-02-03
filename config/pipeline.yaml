@@ -58,7 +58,8 @@ preprocessing:
     led_pd_pos: 6
     led: null
     do_resample: true
-    apply_hpf: false
+    apply_hpf: true
+    hpf_cutoff: 0.5
 
   ppg_infra:
     time_col: time
@@ -87,8 +88,8 @@ preprocessing:
     do_resample: true
 
 windowing:
-  overlap: 0.0  # No overlap = independent windows for proper ML validation
-  window_lengths_sec: [10.0, 5.0, 2.0]
+  overlap: 0.1  # 10% overlap
+  window_lengths_sec: [10.0]
 
 features:
   imu:
@@ -150,14 +151,12 @@ targets:
 
 fusion:
   output_dir: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3
-  window_lengths_sec: [10.0, 5.0, 2.0]
+  window_lengths_sec: [10.0]
 
   # tolerance for merge_asof (in seconds)
   # Use larger tolerances to account for inter-modality time offsets
   tolerance_s:
-    "2.0": 2.0
-    "5.0": 2.0
-    "10.0": 2.0
+    "10.0": 5.0
 
   # IMPORTANT: point these to the FEATURE tables you actually want to fuse
   # (if you fuse *_features_*.csv, set them accordingly)

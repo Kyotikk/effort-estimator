@@ -155,6 +155,29 @@ def save_feature_selection_results(output_dir, feature_names, explained_df, load
     print(f"  ✓ Saved: pca_top_loadings.csv")
 
 
+def save_filtered_dataset(df_original, pruned_cols, output_path):
+    """
+    Save a filtered dataset containing only the selected features + metadata columns.
+    This is the dataset that should be used for ML training/analysis.
+    """
+    # Essential metadata columns to keep
+    metadata_cols = ['subject', 'borg', 't_start', 't_center', 't_end', 'window_id']
+    
+    # Keep only columns that exist in the dataframe
+    keep_metadata = [c for c in metadata_cols if c in df_original.columns]
+    
+    # Final columns: metadata + pruned features
+    final_cols = keep_metadata + pruned_cols
+    final_cols = [c for c in final_cols if c in df_original.columns]
+    
+    df_filtered = df_original[final_cols].copy()
+    df_filtered.to_csv(output_path, index=False)
+    
+    print(f"  ✓ Saved filtered dataset: {output_path}")
+    print(f"    → {len(pruned_cols)} features + {len(keep_metadata)} metadata columns")
+    print(f"    → {len(df_filtered)} samples")
+
+
 def main(fused_aligned_path, output_dir, win_sec=10.0):
     """
     Main feature selection + pruning + QC pipeline
@@ -220,8 +243,13 @@ def main(fused_aligned_path, output_dir, win_sec=10.0):
         top_loadings_df
     )
     
+    # Save filtered dataset with only selected features (READY FOR ML)
+    filtered_output_path = Path(output_dir) / f"features_filtered_{win_sec:.1f}s.csv"
+    save_filtered_dataset(df_labeled, pruned_cols, filtered_output_path)
+    
     print("\n" + "="*100)
     print("✅ FEATURE SELECTION + QC COMPLETE")
+    print(f"   → Use '{filtered_output_path.name}' for ML training")
     print("="*100)
     
     return pruned_indices, pruned_cols

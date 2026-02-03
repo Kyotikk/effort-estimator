@@ -1,0 +1,14 @@
+feature,reason,value
+ppg_red_sdsd,nan_ratio>0.1,0.912751677852349
+ppg_red_hr_mean,nan_ratio>0.1,0.5221476510067115
+ppg_red_hr_std,nan_ratio>0.1,0.5221476510067115
+ppg_red_hr_min,nan_ratio>0.1,0.5221476510067115
+ppg_red_hr_max,nan_ratio>0.1,0.5221476510067115
+ppg_red_hr_range,nan_ratio>0.1,0.5221476510067115
+ppg_red_hr_median,nan_ratio>0.1,0.5221476510067115
+ppg_red_rmssd,nan_ratio>0.1,0.5221476510067115
+ppg_red_sdnn,nan_ratio>0.1,0.5221476510067115
+ppg_red_pnn50,nan_ratio>0.1,0.5221476510067115
+ppg_red_pnn20,nan_ratio>0.1,0.5221476510067115
+ppg_red_mean_ibi,nan_ratio>0.1,0.5221476510067115
+ppg_red_cv_ibi,nan_ratio>0.1,0.5221476510067115

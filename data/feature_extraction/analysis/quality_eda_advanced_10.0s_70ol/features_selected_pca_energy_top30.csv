@@ -1,4 +1,5 @@
 eda_scl_slope
-eda_phasic_energy
-eda_scr_rate
-eda_scl_min
+eda_phasic_auc
+eda_scl_max
+eda_scr_amp_sum
+eda_scr_count

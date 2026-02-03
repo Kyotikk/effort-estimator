@@ -10,18 +10,30 @@ This stage:
 
 ---
 
+## Current Configuration (3 Elderly Patients)
+
+| Setting | Value |
+|---------|-------|
+| **Subjects** | sim_elderly3, sim_elderly4, sim_elderly5 |
+| **Best Window Size** | 5.0 seconds |
+| **Comparison Window** | 10.0 seconds |
+| **Overlap** | 10% |
+| **Fusion Tolerance** | 2s (5s windows), 5s (10s windows) |
+
+---
+
 ## Stage 4A: Alignment & Labeling
 
 ### Input: Feature Tables + ADL Labels
 
 **Feature tables:** One per modality/window-length
-- `imu_features_10.0s.csv`
-- `ppg_green_features_10.0s.csv`
-- `eda_features_10.0s.csv`
+- `imu_features_5.0s.csv`
+- `ppg_green_features_5.0s.csv`
+- `eda_features_5.0s.csv`
 - etc.
 
 **ADL (Activity of Daily Living) file:** Contains effort labels
-- Path: `/Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/scai_app/ADLs_1.csv`
+- Path pattern: `/Users/pascalschlegel/data/interim/{subject_path}/scai_app/ADLs_1.csv`
 - Format:
 
 ```
@@ -38,7 +50,7 @@ start_timestamp,end_timestamp,borg_rating,activity_type
 **Algorithm (`ml/targets/run_target_alignment.py`):**
 
 ```python
-def align_features_to_labels(features_csv, adl_csv, window_length):
+def align_features_to_labels(features_csv, adl_csv, window_length, tolerance):
     """
     Align each feature window with corresponding Borg label
     """
@@ -55,23 +67,20 @@ def align_features_to_labels(features_csv, adl_csv, window_length):
         t_start = row['t_start']
         t_end = row['t_end']
         
-        # Window center time (or use start time)
+        # Window center time
         t_center = (t_start + t_end) / 2
         
-        # Find ADL segment that contains this window center
+        # Find ADL segment within tolerance of window center
         matching_adl = adl_df[
-            (adl_df['t_start_sec'] <= t_center) & 
-            (t_center < adl_df['t_end_sec'])
+            (adl_df['t_start_sec'] <= t_center + tolerance) & 
+            (t_center - tolerance < adl_df['t_end_sec'])
         ]
         
-        if len(matching_adl) == 1:
+        if len(matching_adl) >= 1:
             features_df.loc[idx, 'borg'] = matching_adl.iloc[0]['borg_rating']
             features_df.loc[idx, 'activity'] = matching_adl.iloc[0]['activity_type']
-        elif len(matching_adl) == 0:
-            features_df.loc[idx, 'borg'] = NaN
         else:
-            # Multiple matches - shouldn't happen with proper ADL definition
-            features_df.loc[idx, 'borg'] = matching_adl.iloc[0]['borg_rating']  # Take first
+            features_df.loc[idx, 'borg'] = NaN
     
     # Drop rows without labels
     features_aligned = features_df.dropna(subset=['borg'])
@@ -79,44 +88,59 @@ def align_features_to_labels(features_csv, adl_csv, window_length):
     return features_aligned
 ```
 
-### Alignment Output
+### Tolerance Settings by Window Size
 
-**imu_aligned_10.0s.csv** (example):
+**Critical insight:** Different window sizes require different alignment tolerances.
+
+| Window | Tolerance | Rationale |
+|--------|-----------|-----------|
+| **5s** | 2.0s | Window is short, tight alignment needed |
+| **10s** | 5.0s | Longer window needs looser tolerance |
+| **30s** | 15.0s | Very long window, widest tolerance |
+
+**Implemented in `run_elderly_10s_30s.py`:**
+```python
+TOLERANCE_MAP = {
+    5.0: 2.0,
+    10.0: 5.0,
+    30.0: 15.0,
+}
 ```
-window_id,t_start,t_end,imu_acc_x_mean,imu_acc_x_std,...,borg,activity
-0,0.0,10.0,0.042,0.089,...,2,rest
-1,3.0,13.0,-0.031,0.095,...,4,light_walk
-2,6.0,16.0,0.115,0.142,...,4,light_walk
-...
-429,415.2,425.2,0.487,0.201,...,12,heavy_exercise
+
+### Labeling Statistics by Window Size
+
+**5s Windows (Best):**
+```
+Total feature windows generated:    ~4000
+Windows successfully labeled:        855 (21%)
+Windows with missing labels:         ~3145 (79%)
+Unique activities (groups):          65
+
+Borg Rating Distribution (855 labeled):
+  Borg 0-2 (rest/light):   ~170 windows (20%)
+  Borg 3-5 (light):        ~220 windows (26%)
+  Borg 6-8 (moderate):     ~250 windows (29%)
+  Borg 9-12 (hard):        ~180 windows (21%)
+  Borg 13+ (very hard):    ~35 windows (4%)
 ```
 
-**Each row now has:**
-- ✓ Window metadata (id, times)
-- ✓ Modality features (30-44 features)
-- ✓ Borg label (0-20 scale)
-- ✓ Activity type (metadata)
-
-### Labeling Statistics (10s windows)
-
-From the alignment step on current data:
-
+**10s Windows (Comparison):**
 ```
 Total feature windows generated:    ~2000
-Windows successfully labeled:        429 (21%)
-Windows with missing labels:         ~1571 (79%)
+Windows successfully labeled:        424 (21%)
+Windows with missing labels:         ~1576 (79%)
 
-Borg Rating Distribution (429 labeled):
-  Borg 0 (rest):           45 windows (10.5%)
-  Borg 2 (very light):    102 windows (23.8%)
-  Borg 4 (light):          89 windows (20.8%)
-  Borg 6 (slightly hard):  78 windows (18.2%)
-  Borg 8 (hard):           65 windows (15.2%)
-  Borg 10 (very hard):     31 windows (7.2%)
-  Borg 12+ (extreme):      19 windows (4.4%)
+Borg rating distribution similar to 5s
 ```
 
-**Note:** Many windows dropped because they don't align with ADL segments (e.g., overlap activity boundaries or occur between marked activities).
+**30s Windows (Poor):**
+```
+Total feature windows generated:    ~700
+Windows successfully labeled:        100 (14%)
+Windows with missing labels:         ~600 (86%)
+
+⚠️ sim_elderly5 lost ALL labels (0 windows aligned)
+```
 
 ---
 
@@ -127,24 +151,24 @@ Borg Rating Distribution (429 labeled):
 Combine all modality features into single table for training:
 
 ```
-Features from multiple tables:
-  - imu_aligned_10.0s.csv          [30 features]
-  - ppg_green_aligned_10.0s.csv    [44 features]
-  - ppg_infra_aligned_10.0s.csv    [44 features]
-  - ppg_red_aligned_10.0s.csv      [44 features]
-  - eda_aligned_10.0s.csv          [26 features]
+Features from multiple tables (5s example):
+  - imu_aligned_5.0s.csv           [~30 features]
+  - ppg_green_aligned_5.0s.csv     [~44 features]
+  - ppg_infra_aligned_5.0s.csv     [~44 features]
+  - ppg_red_aligned_5.0s.csv       [~44 features]
+  - eda_aligned_5.0s.csv           [~26 features]
            ↓
         FUSION
            ↓
-  - fused_aligned_10.0s.csv        [188 features + borg label]
+  - fused_aligned_5.0s.csv         [270+ features + borg label]
 ```
 
 ### Fusion Algorithm
 
-**Algorithm (`ml/run_fusion.py`):**
+**Algorithm (`ml/fusion/fuse_windows.py`):**
 
 ```python
-def fuse_modalities(aligned_tables, window_length):
+def fuse_modalities(aligned_tables, window_length, tolerance):
     """
     Fuse features from multiple modalities using time-based merge
     """
@@ -157,79 +181,57 @@ def fuse_modalities(aligned_tables, window_length):
     for modality in modalities:
         other = pd.read_csv(f'{modality}_aligned_{window_length}.csv')
         
-        # Merge based on time windows (t_start, t_end must match)
-        # Use merge_asof with tolerance to account for slight time differences
+        # Merge based on time windows (t_center must match within tolerance)
         fused = pd.merge_asof(
-            fused.sort_values('t_start'),
-            other.sort_values('t_start'),
-            on='t_start',
+            fused.sort_values('t_center'),
+            other.sort_values('t_center'),
+            on='t_center',
             direction='nearest',
-            tolerance=2.0  # 2 second tolerance
+            tolerance=tolerance
         )
     
     return fused
 ```
 
-### Fusion Configuration
+### Fusion Output by Window Size
 
-**Tolerance settings (pipeline.yaml):**
-```yaml
-fusion:
-  tolerance_s:
-    "2.0": 2.0
-    "5.0": 2.0
-    "10.0": 2.0
+**5s Windows (elderly_aligned_5.0s.csv):**
 ```
-
-**Rationale:** 
-- 2.0s tolerance allows for minor timing skew between sensors
-- Larger than window stride (0.3-1.5s) to ensure matches
-- Smaller than window length to avoid cross-window merging
-
-### Fusion Output
-
-**fused_aligned_10.0s.csv:**
-```
-[429 rows × 195 columns]
+[855 rows × 270+ columns]
 
 Columns:
-- window_id_r               (reference IMU window ID)
-- t_start_r, t_end_r       (reference window times)
+- subject                   (sim_elderly3, sim_elderly4, sim_elderly5)
+- t_start, t_center, t_end (window times)
 - borg                      (Borg effort label - TARGET)
-- activity                  (activity type)
+- activity_id               (activity ID for grouping)
+- 270+ feature columns
 
-Feature columns (188 total):
-- imu_acc_x_mean, imu_acc_x_std, ..., imu_entropy
-- ppg_green_hr_mean, ppg_green_std, ..., ppg_green_entropy
-- ppg_infra_hr_mean, ppg_infra_std, ..., ppg_infra_entropy
-- ppg_red_hr_mean, ppg_red_std, ..., ppg_red_entropy
-- eda_cc_mean, eda_cc_std, ..., eda_stress_skin_entropy
+After feature selection: 48 features retained
 ```
 
-**Example row:**
+**10s Windows (elderly_aligned_10.0s.csv):**
 ```
-window_id_r=142, t_start_r=14.2, t_end_r=24.2, borg=8,
-imu_acc_x_mean=0.15, imu_acc_x_std=0.23, ...
-ppg_green_hr_mean=92, ppg_green_hrv_rmssd=45, ...
-eda_cc_mean=2.8, eda_cc_range=0.95, ...
+[424 rows × 270+ columns]
+
+After feature selection: 51 features retained
 ```
 
-### Fusion Statistics
+### Multi-Subject Fusion
 
-**Before fusion:**
-```
-IMU features:        429 windows × 30 features
-PPG Green features:  429 windows × 44 features  
-PPG Infra features:  429 windows × 44 features
-PPG Red features:    429 windows × 44 features
-EDA features:        429 windows × 26 features
-```
+**Cross-subject combination:**
+```python
+# Per-subject data
+subjects = ['sim_elderly3', 'sim_elderly4', 'sim_elderly5']
+all_data = []
 
-**After fusion:**
-```
-Fused features:      429 windows × 195 columns
-                     = 429 rows × (31 + 45 + 45 + 45 + 27 + borg)
-                     = 429 samples × 188 feature columns + 1 target
+for subject in subjects:
+    subject_df = load_aligned_data(subject, window_length)
+    subject_df['subject'] = subject
+    all_data.append(subject_df)
+
+# Concatenate all subjects
+combined = pd.concat(all_data, ignore_index=True)
+combined.to_csv(f'elderly_aligned_{window_length}.csv')
 ```
 
 ---
@@ -237,25 +239,33 @@ Fused features:      429 windows × 195 columns
 ## Detailed Flow Diagram
 
 ```
-RAW DATA STREAM
+RAW DATA STREAM (3 subjects)
     ↓
 PREPROCESSING
-    ↓ [6 preprocessed files]
+    ↓ [6 preprocessed files × 3 subjects]
 WINDOWING
-    ↓ [6 window definition files]
+    ↓ [6 window definition files × 3 subjects]
 FEATURE EXTRACTION
-    ↓ [6 feature files: imu, ppg_green, ppg_infra, ppg_red, eda, rr]
+    ↓ [6 feature files per subject: imu, ppg_green, ppg_infra, ppg_red, eda, rr]
     ↓
-ALIGNMENT
-    ├─ imu_features_10.0s.csv + ADL labels → imu_aligned_10.0s.csv
-    ├─ ppg_green_features_10.0s.csv + ADL labels → ppg_green_aligned_10.0s.csv
-    ├─ ppg_infra_features_10.0s.csv + ADL labels → ppg_infra_aligned_10.0s.csv
-    ├─ ppg_red_features_10.0s.csv + ADL labels → ppg_red_aligned_10.0s.csv
-    └─ eda_features_10.0s.csv + ADL labels → eda_aligned_10.0s.csv
-    ↓ [5 aligned files, each with borg label]
-FUSION
-    ↓ [merge on (t_start, borg)]
-fused_aligned_10.0s.csv
+ALIGNMENT (per subject)
+    ├─ imu_features_5.0s.csv + ADL labels → imu_aligned_5.0s.csv
+    ├─ ppg_green_features_5.0s.csv + ADL labels → ppg_green_aligned_5.0s.csv
+    ├─ ppg_infra_features_5.0s.csv + ADL labels → ppg_infra_aligned_5.0s.csv
+    ├─ ppg_red_features_5.0s.csv + ADL labels → ppg_red_aligned_5.0s.csv
+    └─ eda_features_5.0s.csv + ADL labels → eda_aligned_5.0s.csv
+    ↓ [5 aligned files per subject, each with borg label]
+FUSION (per subject)
+    ↓ [merge on t_center with tolerance]
+subject_fused_aligned_5.0s.csv
+    ↓
+MULTI-SUBJECT CONCATENATION
+    ↓
+elderly_aligned_5.0s.csv (855 samples)
+    ↓
+FEATURE SELECTION (correlation + pruning)
+    ↓
+elderly_aligned_5.0s.csv (48 features)
     ↓
 READY FOR TRAINING
 ```
@@ -267,42 +277,36 @@ READY FOR TRAINING
 **Checks performed:**
 
 1. ✓ Window times are reasonable (t_end > t_start)
-2. ✓ Borg labels valid (0-20 range, int type)
+2. ✓ Borg labels valid (0-20 range, numeric type)
 3. ✓ All modalities have data for same time windows
 4. ✓ No duplicate windows
 5. ✓ Time progression monotonic
+6. ✓ Subject column populated correctly
 
 **Example issues detected:**
 - ⚠ PPG window missing (tolerance exceeded): Dropped
 - ⚠ ADL label extends beyond data: Window discarded
 - ⚠ Multiple ADL segments in one window: Take earliest
+- ⚠ sim_elderly5 with 30s windows: 0 aligned (alignment issue)
 
 ---
 
-## Alignment & Fusion Configuration
+## Output Files Location
 
-From `config/pipeline.yaml`:
-
-```yaml
-targets:
-  imu:
-    adl_path: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/scai_app/ADLs_1.csv
-
-fusion:
-  output_dir: /Users/pascalschlegel/data/interim/parsingsim3/sim_elderly3/effort_estimation_output/parsingsim3_sim_elderly3
-  window_lengths_sec: [10.0, 5.0, 2.0]
-  
-  tolerance_s:
-    "2.0": 2.0
-    "5.0": 2.0
-    "10.0": 2.0
-  
-  modalities:
-    imu: .../imu_bioz/imu_features_{window_length}.csv
-    ppg_green: .../ppg_green/ppg_green_features_{window_length}.csv
-    ppg_infra: .../ppg_infra/ppg_infra_features_{window_length}.csv
-    ppg_red: .../ppg_red/ppg_red_features_{window_length}.csv
-    eda: .../eda/eda_features_{window_length}.csv
+**Combined multi-subject output:**
+```
+/Users/pascalschlegel/data/interim/elderly_combined/
+├── elderly_aligned_5.0s.csv      # 855 samples, best
+├── elderly_aligned_10.0s.csv     # 424 samples, comparison
+├── elderly_aligned_30.0s.csv     # 100 samples, poor
+│
+├── qc_5.0s/                       # Feature selection QC
+│   ├── features_selected_pruned.csv
+│   └── pca_*.csv
+│
+└── xgboost_results/               # Model outputs
+    ├── summary.yaml
+    └── predictions.csv
 ```
 
 ---
@@ -311,37 +315,48 @@ fusion:
 
 | Case | Handling |
 |------|----------|
-| **Window at activity boundary** | Use center time; include if center in activity |
+| **Window at activity boundary** | Use center time; include if center within tolerance |
 | **Window spans 2 activities** | Drop (ambiguous label) |
 | **No ADL label for window** | Drop from training set |
 | **Modality data missing** | Drop (incomplete feature vector) |
 | **NaN values in features** | Fill with column median after fusion |
+| **Subject has no aligned windows** | Warning logged, excluded from combined |
 
 ---
 
-## Summary Statistics
+## Summary Statistics by Window Size
 
-**Dataset after alignment & fusion (10s windows):**
+| Metric | 5s Windows | 10s Windows | 30s Windows |
+|--------|------------|-------------|-------------|
+| **Total windows labeled** | 855 | 424 | 100 |
+| **Raw features** | 270+ | 270+ | 270+ |
+| **Selected features** | 48 | 51 | 20 |
+| **Unique activities (groups)** | 65 | ~35 | ~12 |
+| **Subjects contributing** | 3 | 3 | 2* |
+| **Borg range** | 0-17 | 0-17 | 0-15 |
+| **Borg mean ± std** | 5.8 ± 3.5 | 5.9 ± 3.4 | 5.5 ± 3.2 |
 
-| Metric | Value |
-|--------|-------|
-| Total windows created | ~2,000 |
-| Windows labeled (with ADL match) | 429 |
-| Windows used in training | 429 |
-| Features per sample | 188 |
-| Target range (Borg) | 0-20 |
-| Target mean | 6.4 ± 3.2 |
-| Train/test split | 80/20 |
-| Training samples | 343 |
-| Test samples | 86 |
+*sim_elderly5 lost all labels with 30s windows due to alignment tolerance issues
+
+---
+
+## Why 5s Windows Are Best
+
+| Factor | 5s | 10s | 30s |
+|--------|----|----|-----|
+| **N samples** | 855 | 424 | 100 |
+| **Statistical power** | High | Medium | Low |
+| **Temporal resolution** | Best | Good | Poor |
+| **Label alignment** | Most precise | Good | Problematic |
+| **CV stability** | Best | Good | Unstable |
 
 ---
 
 ## Next Step: Feature Selection & Training
 
 The fused aligned table is now ready for:
-1. **Feature selection** - Reduce 188 → 100 features
-2. **Training** - Train XGBoost model
+1. **Feature selection** - Reduce 270+ → 48 features (correlation + pruning)
+2. **Training** - Train XGBoost and Ridge models with GroupKFold CV
 
 See [05_FEATURE_SELECTION.md](05_FEATURE_SELECTION.md) and [06_TRAINING.md](06_TRAINING.md).
 

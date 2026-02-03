@@ -1,0 +1,16 @@
+feature,pca_energy_score
+ppg_infra_cv_ibi,0.2292218122965619
+ppg_infra_lf_power,0.22701018125480793
+ppg_infra_sdnn,0.22422103064363055
+ppg_infra_lf_hf_ratio,0.21222716098199176
+ppg_infra_total_power,0.210054898522922
+ppg_infra_lf_norm,0.20604442904305084
+ppg_infra_sdsd,0.20155601720064345
+ppg_infra_n_peaks,0.1990581608595527
+ppg_infra_hf_power,0.19732468508165035
+ppg_infra_peak_quality,0.19357937487752916
+ppg_infra_hr_max,0.19065430729239807
+ppg_infra_hr_std,0.18386301630698618
+ppg_infra_pnn20,0.17113276632324625
+ppg_infra_hr_range,0.16170943147521247
+ppg_infra_pnn50,0.1605453285657034

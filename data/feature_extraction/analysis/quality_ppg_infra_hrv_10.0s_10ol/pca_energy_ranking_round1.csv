@@ -1,0 +1,17 @@
+feature,pca_energy_score
+ppg_infra_hr_range,0.21694737993964525
+ppg_infra_sdnn,0.21645832778032006
+ppg_infra_pnn50,0.2087670050654429
+ppg_infra_hr_std,0.20429205512719398
+ppg_infra_rmssd,0.19961653548765887
+ppg_infra_pnn20,0.19249593148564478
+ppg_infra_hr_max,0.19137019994982327
+ppg_infra_sdsd,0.1908652852043425
+ppg_infra_mean_ibi,0.18446092895703686
+ppg_infra_n_peaks,0.1723281735561449
+ppg_infra_hr_median,0.17182364459165175
+ppg_infra_hr_min,0.16697956691333835
+ppg_infra_hf_power,0.1643561466699348
+ppg_infra_cv_ibi,0.15636987183265286
+ppg_infra_peak_quality,0.14309260814380606
+ppg_infra_total_power,0.13686467704876198

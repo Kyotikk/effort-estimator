@@ -1,0 +1,6 @@
+feature,reason,value
+ppg_red_lf_norm,|corr|>=0.95,1.0000000000000002
+ppg_red_rmssd,|corr|>=0.95,0.9931156499997782
+ppg_red_hr_mean,|corr|>=0.95,0.989639291607178
+ppg_red_hr_min,|corr|>=0.95,0.9737360869573177
+ppg_red_hr_median,|corr|>=0.95,0.9629203785057797

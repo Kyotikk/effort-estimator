@@ -1,0 +1,4 @@
+feature,reason,value
+acc_x_dyn__quantile_0.3,|corr|>=0.95,0.9680176079716626
+acc_z_dyn__approximate_entropy_0.1,|corr|>=0.95,0.9587086268665307
+acc_x_dyn__sample_entropy,|corr|>=0.95,0.9571494439952333

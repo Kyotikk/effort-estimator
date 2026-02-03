@@ -4,7 +4,8 @@
 
 Feature extraction computes mathematical features from windowed sensor signals. These features summarize signal properties (mean, frequency content, morphology, etc.) that correlate with effort level.
 
-**Total features:** 188 across all modalities
+**Total raw features:** 270+ across all modalities (before selection)
+**After selection:** 48 features (5s windows), 51 features (10s windows)
 
 ---
 
@@ -200,17 +201,19 @@ Per axis (x, y, z):
 ## Feature Count Summary
 
 ```
-Modality            Features    Features/Window    Active?
-────────────────────────────────────────────────────────
-IMU                   30             30           ✓ Yes
-PPG Green             44             44           ✓ Yes
-PPG Infra             44             44           ✓ Yes
-PPG Red               44             44           ✓ Yes
-EDA                   26             26           ✓ Yes
-RR (Respiratory)       0              0           ✗ No (non-uniform)
-────────────────────────────────────────────────────────
-TOTAL:               188            188           ✓
+Modality            Raw Features    After Selection (5s)    Active?
+────────────────────────────────────────────────────────────────────
+IMU                   90+                 6                 ✓ Yes
+PPG Green             44+                12                 ✓ Yes
+PPG Infra             44+                 8                 ✓ Yes
+PPG Red               44+                 4                 ✓ Yes
+EDA                   40+                18                 ✓ Yes
+RR (Respiratory)       0                  0                 ✗ No (non-uniform)
+────────────────────────────────────────────────────────────────────
+TOTAL:               270+               48                  ✓
 ```
+
+**Note:** Raw feature counts are approximate as tifex engine generates many variants.
 
 ---
 
@@ -259,34 +262,38 @@ def extract_features(signal_window, fs, modality):
 
 ## Feature Extraction Output
 
-After feature extraction:
+After feature extraction (per subject, per window size):
 
 ```
-effort_estimation_output/parsingsim3_sim_elderly3/
+effort_estimation_output/{subject}/
 ├── imu_bioz/
-│   ├── imu_features_10.0s.csv      [429 rows, 31 cols: window_id + 30 features]
-│   ├── imu_features_5.0s.csv
-│   └── imu_features_2.0s.csv
+│   ├── imu_features_5.0s.csv       [~850 rows, 90+ feature cols]
+│   ├── imu_features_10.0s.csv      [~420 rows]
+│   └── imu_features_30.0s.csv      [~50 rows]
 ├── ppg_green/
-│   ├── ppg_green_features_10.0s.csv [429 rows, 45 cols: window_id + 44 features]
-│   ├── ppg_green_features_5.0s.csv
-│   └── ppg_green_features_2.0s.csv
+│   ├── ppg_green_features_5.0s.csv [~850 rows, 44+ feature cols]
+│   └── [10.0s, 30.0s variants]
 ├── ppg_infra/
-│   ├── ppg_infra_features_10.0s.csv
-│   └── [5.0s, 2.0s variants]
+│   ├── ppg_infra_features_5.0s.csv
+│   └── [10.0s, 30.0s variants]
 ├── ppg_red/
-│   ├── ppg_red_features_10.0s.csv
-│   └── [5.0s, 2.0s variants]
+│   ├── ppg_red_features_5.0s.csv
+│   └── [10.0s, 30.0s variants]
 └── eda/
-    ├── eda_features_10.0s.csv      [429 rows, 27 cols: window_id + 26 features]
-    └── [5.0s, 2.0s variants]
+    ├── eda_features_5.0s.csv       [~850 rows, 40+ feature cols]
+    └── [10.0s, 30.0s variants]
 ```
+
+**Current subjects:**
+- parsingsim3/sim_elderly3
+- parsingsim4/sim_elderly4
+- parsingsim5/sim_elderly5
 
 **Example feature CSV:**
 ```
-window_id,imu_acc_x_mean,imu_acc_x_std,...,imu_entropy
-0,0.042,0.089,...,2.314
-1,-0.031,0.095,...,2.401
+window_id,t_start,t_center,t_end,imu_acc_x_mean,imu_acc_x_std,...,imu_entropy
+0,0.0,2.5,5.0,0.042,0.089,...,2.314
+1,0.5,3.0,5.5,-0.031,0.095,...,2.401
 ...
 ```
 

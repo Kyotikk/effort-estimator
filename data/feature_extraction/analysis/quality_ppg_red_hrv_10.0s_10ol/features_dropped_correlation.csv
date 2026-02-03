@@ -1,0 +1,4 @@
+feature,reason,value
+ppg_red_hr_mean,|corr|>=0.95,0.9917549739395787
+ppg_red_hr_min,|corr|>=0.95,0.9560254868918548
+ppg_red_hr_median,|corr|>=0.95,0.9541495444305874

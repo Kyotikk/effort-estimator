@@ -1,0 +1,11 @@
+feature,pca_energy_score
+eda_cc_min,0.2740887676821636
+eda_cc_range,0.26966522992298003
+eda_cc_slope,0.25337538634465206
+eda_stress_skin_mad,0.2530868394902571
+eda_cc_skew,0.24941453051308976
+eda_stress_skin_slope,0.2479869178313433
+eda_stress_skin_min,0.24068822932710432
+eda_cc_kurtosis,0.22578400389938685
+eda_stress_skin_skew,0.22485259388206993
+eda_stress_skin_kurtosis,0.20271743936273875

@@ -1,0 +1,11 @@
+ppg_infra_n_peaks
+ppg_infra_hr_std
+ppg_infra_hr_min
+ppg_infra_hr_max
+ppg_infra_hr_range
+ppg_infra_rmssd
+ppg_infra_pnn50
+ppg_infra_pnn20
+ppg_infra_mean_ibi
+ppg_infra_cv_ibi
+ppg_infra_peak_quality

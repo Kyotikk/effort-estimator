@@ -2,7 +2,8 @@
 Feature selection module - selects and prunes features.
 
 Callable functions:
-- select_features()  # Main feature selection function
+- select_features()           # Legacy: correlation-based (pooled)
+- select_features_consistent() # NEW: consistent across subjects (recommended)
 """
 
 import pandas as pd
@@ -12,6 +13,51 @@ from ml.feature_selection_and_qc import (
     perform_pca_analysis,
     save_feature_selection_results
 )
+from ml.consistent_feature_selection import (
+    select_consistent_features,
+    select_features_for_loso
+)
+
+
+def select_features_consistent(
+    df, 
+    subject_col='subject',
+    target_col='borg', 
+    min_subjects=4,
+    top_n=30,
+    verbose=True
+):
+    """
+    Select features that correlate CONSISTENTLY across all subjects.
+    
+    This is the RECOMMENDED method for feature selection because:
+    1. Features are selected based on cross-subject consistency
+    2. Avoids data leakage in LOSO cross-validation
+    3. Better generalization to new subjects
+    
+    Args:
+        df: DataFrame with features, subject column, and target
+        subject_col: Name of subject identifier column
+        target_col: Name of target column
+        min_subjects: Minimum subjects with same correlation direction
+        top_n: Maximum features to select
+        verbose: Print progress
+        
+    Returns:
+        tuple: (selected_features_list, summary_dataframe)
+    """
+    selected, summary = select_consistent_features(
+        df,
+        subject_col=subject_col,
+        target_col=target_col,
+        min_subjects=min_subjects,
+        min_abs_correlation=0.05,
+        top_n=top_n,
+        prune_redundant=True,
+        verbose=verbose
+    )
+    
+    return selected, summary
 
 
 def select_features(df, target_col='borg', corr_threshold=0.90, top_n=100):

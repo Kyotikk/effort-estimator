@@ -1,0 +1,15 @@
+eda_scl_mean
+eda_scl_std
+eda_scl_min
+eda_scl_max
+eda_scl_range
+eda_scl_slope
+eda_scl_auc
+eda_scr_count
+eda_scr_rate
+eda_scr_amp_sum
+eda_phasic_mean
+eda_phasic_std
+eda_phasic_max
+eda_phasic_auc
+eda_phasic_energy

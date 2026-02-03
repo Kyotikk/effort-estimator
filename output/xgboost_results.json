@@ -1,0 +1,90 @@
+{
+  "xgboost_r": 0.34525522113918045,
+  "xgboost_rmse": 1.837699081356204,
+  "xgboost_mae": 1.4530193303431664,
+  "n_features": 280,
+  "n_windows": 143,
+  "n_activities": 26,
+  "top_features": [
+    {
+      "feature": "ppg_green_p95_p5",
+      "importance": 0.14709502458572388
+    },
+    {
+      "feature": "ppg_green_n_peaks",
+      "importance": 0.13236232101917267
+    },
+    {
+      "feature": "ppg_green_hr_mean",
+      "importance": 0.11418752372264862
+    },
+    {
+      "feature": "ppg_green_p99_p1",
+      "importance": 0.06624921411275864
+    },
+    {
+      "feature": "ppg_green_hr_max",
+      "importance": 0.05342834070324898
+    },
+    {
+      "feature": "acc_z_dyn__variance_of_absolute_differences",
+      "importance": 0.05158691108226776
+    },
+    {
+      "feature": "acc_z_dyn__lower_complete_moment",
+      "importance": 0.046698104590177536
+    },
+    {
+      "feature": "acc_z_dyn__lower_complete_moment_r",
+      "importance": 0.038472551852464676
+    },
+    {
+      "feature": "eda_stress_skin_slope",
+      "importance": 0.030600832775235176
+    },
+    {
+      "feature": "ppg_green_signal_rms",
+      "importance": 0.027063440531492233
+    },
+    {
+      "feature": "ppg_green_cv_ibi",
+      "importance": 0.0197602529078722
+    },
+    {
+      "feature": "ppg_infra_p5",
+      "importance": 0.019208598881959915
+    },
+    {
+      "feature": "acc_x_dyn__quantile_0.9",
+      "importance": 0.01626093126833439
+    },
+    {
+      "feature": "acc_x_dyn__quantile_0.6",
+      "importance": 0.015374932438135147
+    },
+    {
+      "feature": "ppg_green_std",
+      "importance": 0.01522841677069664
+    },
+    {
+      "feature": "eda_cc_mean",
+      "importance": 0.013478619046509266
+    },
+    {
+      "feature": "acc_z_dyn__quantile_0.4_r",
+      "importance": 0.012389147654175758
+    },
+    {
+      "feature": "acc_y_dyn__katz_fractal_dimension",
+      "importance": 0.011441498063504696
+    },
+    {
+      "feature": "eda_stress_skin_mean_abs_diff",
+      "importance": 0.011205550283193588
+    },
+    {
+      "feature": "acc_x_dyn__sample_entropy_r",
+      "importance": 0.009326163679361343
+    }
+  ]
+}

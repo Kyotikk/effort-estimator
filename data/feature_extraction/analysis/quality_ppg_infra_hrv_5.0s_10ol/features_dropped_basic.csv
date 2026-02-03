@@ -1,0 +1,5 @@
+feature,reason,value
+ppg_infra_lf_power,nan_ratio>0.1,0.5266666666666666
+ppg_infra_hf_power,nan_ratio>0.1,0.5266666666666666
+ppg_infra_total_power,nan_ratio>0.1,0.5266666666666666
+ppg_infra_sdsd,nan_ratio>0.1,0.2633333333333333

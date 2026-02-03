@@ -1,0 +1,11 @@
+feature,reason,value
+eda_scr_rate,|corr|>=0.95,0.9999999999999998
+eda_scl_mean,|corr|>=0.95,0.9999999999996725
+eda_phasic_auc,|corr|>=0.95,0.9999998494793363
+eda_scl_range,|corr|>=0.95,0.9999320553219432
+eda_scl_max,|corr|>=0.95,0.9998044380622244
+eda_phasic_std,|corr|>=0.95,0.9998032604815595
+eda_scl_auc,|corr|>=0.95,0.9997982016841317
+eda_phasic_mean,|corr|>=0.95,0.9967392637555844
+eda_scl_std,|corr|>=0.95,0.9925798348505289
+eda_phasic_max,|corr|>=0.95,0.9564762672444536

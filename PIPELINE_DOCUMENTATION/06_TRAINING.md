@@ -2,15 +2,12 @@
 
 ## Overview
 
-This stage trains an XGBoost regressor to predict Borg effort ratings from the 100 selected features.
+This stage trains XGBoost and Ridge regression models to predict Borg effort ratings from selected features using GroupKFold cross-validation.
 
-**Key components:**
-1. Load fused, aligned data
-2. Train-test split
-3. Feature scaling
-4. XGBoost model training
-5. Cross-validation
-6. Performance evaluation
+**Key Results:**
+- **5s Windows (Best):** XGBoost r=0.626, Ridge r=0.644
+- **10s Windows:** XGBoost r=0.548, Ridge r=0.567
+- **30s Windows:** XGBoost r=0.364, Ridge r=0.184
 
 ---
 
@@ -18,492 +15,491 @@ This stage trains an XGBoost regressor to predict Borg effort ratings from the 1
 
 ### Input
 
-**File:** `fused_aligned_10.0s.csv` (429 windows)
+**File:** `elderly_aligned_5.0s.csv` (855 labeled windows)
 
 ```
-[429 rows × 195 columns]
-Columns: window_id, times, ..., 188 features ..., borg (target)
+Shape: [855 rows × 280+ columns]
+Columns: window_id, t_start, t_center, t_end, subject, borg, + 270+ features
 ```
 
 ### Data Cleaning
 
 ```python
+# Load combined aligned dataset
+df = pd.read_csv("elderly_aligned_5.0s.csv")
+
 # Remove rows with missing Borg labels
 df_labeled = df.dropna(subset=['borg'])
-print(f"Labeled windows: {len(df_labeled)}")  # → 429
+print(f"Labeled windows: {len(df_labeled)}")  # → 855
 
 # Identify feature columns (exclude metadata)
-metadata_cols = {
-    'window_id', 'start_idx', 'end_idx', 
-    't_start', 't_end', 'n_samples', 'valid', 
-    'borg', 'activity', 'modality', 'win_sec'
+skip_cols = {
+    'window_id', 'start_idx', 'end_idx', 'valid',
+    't_start', 't_center', 't_end', 'n_samples', 'win_sec',
+    'modality', 'subject', 'label', 'borg',
 }
-feature_cols = [c for c in df.columns if c not in metadata_cols]
-print(f"Feature columns: {len(feature_cols)}")  # → 188
+
+def is_metadata(col):
+    if col in skip_cols:
+        return True
+    if col.endswith("_r"):  # Redundant columns
+        return True
+    return False
+
+feature_cols = [col for col in df.columns if not is_metadata(col)]
+print(f"Feature columns: {len(feature_cols)}")  # → 270+
 
 # Extract features and target
-X = df_labeled[feature_cols].copy()
-y = df_labeled['borg'].copy()
+X = df_labeled[feature_cols].values
+y = df_labeled['borg'].values
 
-# Handle NaN in features
-X = X.fillna(X.mean())
-
-print(f"X shape: {X.shape}")  # → (429, 188)
+print(f"X shape: {X.shape}")  # → (855, 270+)
 print(f"y stats: mean={y.mean():.2f}, std={y.std():.2f}")
 ```
 
-### Input Statistics
+### Input Statistics (5s Windows)
 
 ```
-Total samples: 429
-Feature count: 188
+Total samples:       855
+Feature count:       270+ (before selection)
+                     48 (after selection)
+
 Target (Borg) statistics:
-  Mean: 6.4 (moderate effort)
-  Std:  3.2
-  Min:  0 (rest)
-  Max:  20 (maximum effort)
-  Median: 6.0
+  Mean:   4.8
+  Std:    2.4
+  Min:    0 (rest)
+  Max:    8 (hard effort)
+  Median: 5.0
+
+Per-subject breakdown:
+  sim_elderly3: ~280 samples
+  sim_elderly4: ~290 samples
+  sim_elderly5: ~285 samples
 ```
 
 ---
 
 ## Feature Selection
 
-### Method: SelectKBest
+### Method: Correlation-Based Selection with Pruning
 
 ```python
-from sklearn.feature_selection import SelectKBest, f_regression
+from ml.feature_selection_and_qc import select_and_prune_features
 
-N_FEATURES_SELECT = 100
-
-# Score each feature by correlation with target
-selector = SelectKBest(f_regression, k=min(N_FEATURES_SELECT, X.shape[1]))
-X_selected = selector.fit_transform(X, y)
-
-# Map to feature names
-selected_feature_names = np.array(feature_cols)[selector.get_support()].tolist()
-
-# Create new feature matrix
-X = pd.DataFrame(X_selected, columns=selected_feature_names)
-
-print(f"Selected {len(X.columns)} from {len(feature_cols)}")  # → 100 from 188
-```
-
-**Result:** 188 → 100 features (47% reduction)
-
----
-
-## Train-Test Split
-
-### Stratification & Randomness
-
-```python
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, 
-    test_size=0.2,              # 20% test, 80% train
-    random_state=42,            # Reproducibility
+# Select top 100 by correlation with Borg
+# Then prune redundant features (r > 0.90)
+pruned_indices, pruned_cols = select_and_prune_features(
+    X, y, feature_cols,
+    corr_threshold=0.90,  # Remove if r > 0.90 with another feature
+    top_n=100             # Start with top 100 by correlation
 )
 
-print(f"Train: {len(X_train)} samples")  # → 343 (80%)
-print(f"Test:  {len(X_test)} samples")   # → 86 (20%)
+X_selected = X[:, pruned_indices]
+print(f"Selected {len(pruned_cols)} features from {len(feature_cols)}")
+# → 48 from 270+
 ```
 
-### Split Stratification
-
-**Note:** Not using stratification (StratifiedKFold) because:
-- Borg is continuous (0-20), not categorical classes
-- Stratification designed for classification
-- Random split adequate for regression with sufficient samples
-
----
-
-## Feature Scaling
-
-### Why Scale?
-
-```python
-from sklearn.preprocessing import StandardScaler
-
-# Transform: mean=0, std=1 for each feature
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
-```
-
-**Reasons:**
-1. **XGBoost trees:** Equal feature scale helps split decisions
-2. **Interpretability:** Feature importance more comparable
-3. **Regularization:** Penalty terms work fairly across features
-4. **Stability:** Prevents numerical issues
-
-**Important:** Fit scaler on training data only, apply to test (prevent data leakage)
-
-### Example Scaling
+### Selection Results (5s Windows)
 
 ```
-Feature before scaling:
-  imu_acc_x_mean: [-0.5, 0.0, 0.3, -0.2, ...]
-  ppg_green_hr: [72, 95, 81, 110, ...]
+Before pruning:
+  EDA: 28 features
+  IMU: 19 features
+  PPG: 53 features
+  Total: 100
 
-After scaling:
-  imu_acc_x_mean: [-1.2, -0.8, 0.5, -1.0, ...]
-  ppg_green_hr: [-0.3, 1.2, 0.1, 2.1, ...]
+After pruning (r > 0.90 threshold):
+  EDA: 8 features
+  IMU: 19 features
+  PPG: 19 features
+  HRV: 2 features
+  Total: 48 features
 ```
 
 ---
 
-## XGBoost Configuration
+## Cross-Validation Strategy
 
-### Hyperparameters
+### GroupKFold Cross-Validation
 
-```python
-XGBOOST_PARAMS = {
-    "objective": "reg:squarederror",     # Regression (squared error loss)
-    "max_depth": 6,                      # Tree depth limit
-    "learning_rate": 0.1,                # Shrinkage (0-1)
-    "n_estimators": 200,                 # Number of trees
-    "subsample": 0.8,                    # Row sampling (prevent overfitting)
-    "colsample_bytree": 0.8,             # Column sampling per tree
-    "random_state": 42,                  # Reproducibility
-    "verbosity": 0,                      # Suppress output
-}
+**Why GroupKFold instead of standard KFold?**
+
+Standard KFold problem:
+```
+Window 1: Activity A, Borg=6 → Fold 1 (train)
+Window 2: Activity A, Borg=6 → Fold 2 (test)
+Window 3: Activity A, Borg=6 → Fold 1 (train)
+
+Result: Model sees similar windows in train and test
+        → Over-optimistic performance estimates
 ```
 
-### Hyperparameter Rationale
+GroupKFold solution:
+```
+Group all windows from same activity together:
+  Activity A (windows 1-5): All in Fold 1
+  Activity B (windows 6-10): All in Fold 2
+  ...
 
-| Parameter | Value | Reason |
-|-----------|-------|--------|
-| **max_depth** | 6 | Moderate complexity; prevent overfitting |
-| **learning_rate** | 0.1 | Standard; good bias-variance trade-off |
-| **n_estimators** | 200 | Sufficient for 100 features; allow early stopping |
-| **subsample** | 0.8 | Random row sampling for robustness |
-| **colsample_bytree** | 0.8 | Random feature sampling per tree |
+Result: No leakage between related windows
+```
 
-**Not tuned with grid search** (limited data, would overfit hyperparameter space)
+### Activity Group Creation
+
+```python
+# Create activity groups from subject + borg changes
+activity_ids = []
+current_id = 0
+prev_subject = None
+prev_borg = None
+
+for i, (subj, borg) in enumerate(zip(df_labeled["subject"], y)):
+    # New activity when subject or Borg changes
+    if subj != prev_subject or borg != prev_borg:
+        current_id += 1
+    activity_ids.append(current_id)
+    prev_subject = subj
+    prev_borg = borg
+
+groups = np.array(activity_ids)
+n_activities = len(np.unique(groups))
+print(f"Activities detected: {n_activities}")  # → 65 (5s windows)
+```
+
+### Fold Distribution
+
+```
+5s Windows:
+  Total activities: 65
+  Fold 1: ~13 activities, ~170 samples
+  Fold 2: ~13 activities, ~170 samples
+  Fold 3: ~13 activities, ~170 samples
+  Fold 4: ~13 activities, ~170 samples
+  Fold 5: ~13 activities, ~175 samples
+```
 
 ---
 
 ## Model Training
 
-### Training Process
+### XGBoost Configuration
 
 ```python
-from xgboost import XGBRegressor
+import xgboost as xgb
+from sklearn.model_selection import GroupKFold, cross_val_predict
 
-model = xgb.XGBRegressor(**XGBOOST_PARAMS)
-model.fit(X_train, y_train, verbose=False)
+model = xgb.XGBRegressor(
+    n_estimators=100,      # Number of trees
+    max_depth=4,           # Tree depth (regularization)
+    learning_rate=0.1,     # Step size shrinkage
+    random_state=42,       # Reproducibility
+    n_jobs=-1,             # Use all CPUs
+)
 
-print("✓ Model trained successfully")
+# GroupKFold CV
+n_splits = min(5, n_activities)
+cv = GroupKFold(n_splits=n_splits)
+
+# Get cross-validated predictions
+y_pred = cross_val_predict(model, X_selected, y, groups=groups, cv=cv)
 ```
 
-**Training time:** ~1-2 seconds (200 trees × 100 features × 343 samples)
+### Ridge Regression Configuration
 
-### Training Output
+```python
+from sklearn.linear_model import Ridge
+from sklearn.preprocessing import StandardScaler
 
-No intermediate output (verbosity=0), but internally:
-- 200 sequential trees built
-- Each tree ~6 levels deep
-- Each leaf predicts target mean or residual mean
-- Gradient boosting updates residuals
+# Standardize features (required for Ridge)
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X_selected)
+
+# Ridge regression with L2 regularization
+model = Ridge(alpha=1.0)
+
+# GroupKFold CV
+y_pred = cross_val_predict(model, X_scaled, y, groups=groups, cv=cv)
+```
 
 ---
 
 ## Evaluation Metrics
 
-### Test Set Performance (Primary)
+### Primary Metrics
 
 ```python
-y_train_pred = model.predict(X_train)
-y_test_pred = model.predict(X_test)
+from scipy.stats import pearsonr
+import numpy as np
 
-# Test set (unseen data)
-test_r2 = r2_score(y_test, y_test_pred)          # → 0.9225
-test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))  # → 0.5171
-test_mae = mean_absolute_error(y_test, y_test_pred)  # → 0.3540
+# Pearson correlation
+r, p = pearsonr(y, y_pred)
 
-print(f"Test R²:   {test_r2:.4f}")
-print(f"Test RMSE: {test_rmse:.4f} Borg points")
-print(f"Test MAE:  {test_mae:.4f} Borg points")
+# Root Mean Square Error
+rmse = np.sqrt(np.mean((y - y_pred) ** 2))
+
+# Mean Absolute Error
+mae = np.mean(np.abs(y - y_pred))
+
+print(f"Pearson r: {r:.3f} (p={p:.2e})")
+print(f"RMSE: {rmse:.2f}")
+print(f"MAE: {mae:.2f}")
 ```
 
-### Training Set Performance
+### Results Summary
 
-```python
-# Training set (seen during training)
-train_r2 = r2_score(y_train, y_train_pred)      # → 1.0000
-train_rmse = np.sqrt(mean_squared_error(y_train, y_train_pred))
-train_mae = mean_absolute_error(y_train, y_train_pred)
+**5s Windows:**
+```
+XGBoost:
+  Pearson r: 0.626 (p=2.8e-90)
+  RMSE: 1.52
+  MAE: 1.22
 
-print(f"Train R²:   {train_r2:.4f}")
-print(f"Train RMSE: {train_rmse:.4f}")
-print(f"Train MAE:  {train_mae:.4f}")
+Ridge:
+  Pearson r: 0.644 (p=1.4e-97)
+  RMSE: 1.48
+  MAE: 1.17
 ```
 
-### Cross-Validation
-
-```python
-from sklearn.model_selection import cross_val_score, KFold
-
-kfold = KFold(n_splits=5, shuffle=True, random_state=42)
-
-# CV R² scores
-cv_r2 = cross_val_score(model, X, y, cv=kfold, scoring='r2')
-print(f"CV R²:   {cv_r2.mean():.4f} ± {cv_r2.std():.4f}")  # → 0.8689 ± 0.0360
-
-# CV RMSE scores
-cv_rmse = -cross_val_score(model, X, y, cv=kfold, scoring='neg_mean_squared_error')
-cv_rmse = np.sqrt(cv_rmse)
-print(f"CV RMSE: {cv_rmse.mean():.4f} ± {cv_rmse.std():.4f}")  # → 0.6714 ± 0.0963
-
-# CV MAE scores
-cv_mae = -cross_val_score(model, X, y, cv=kfold, scoring='neg_mean_absolute_error')
-print(f"CV MAE:  {cv_mae.mean():.4f} ± {cv_mae.std():.4f}")  # → 0.4164 ± 0.0575
+**10s Windows:**
 ```
+XGBoost:
+  Pearson r: 0.548 (p=1.2e-34)
+  RMSE: 1.65
+  MAE: 1.36
 
----
-
-## Metric Interpretation
-
-### R² Score
-
-**Coefficient of determination:** Fraction of variance explained
-
-$$R^2 = 1 - \frac{\text{SS}_{\text{res}}}{\text{SS}_{\text{tot}}}$$
-
-- **R² = 1.0:** Perfect predictions
-- **R² = 0.9225:** Explains 92.25% of test variance → ✅ Excellent
-- **R² = 0.5:** Explains 50% of variance → Fair
-- **R² = 0:** No better than predicting mean → Poor
-- **R² < 0:** Worse than mean prediction → Very poor
-
-### RMSE (Root Mean Squared Error)
-
-$$\text{RMSE} = \sqrt{\frac{1}{n} \sum (y_{\text{pred}} - y_{\text{true}})^2}$$
-
-- **Units:** Same as target (Borg points)
-- **RMSE = 0.5171:** Typical prediction error ±0.52 Borg points
-- **Borg scale: 0-20**, so 0.52 point error is ~2.6% → ✅ Good
-
-### MAE (Mean Absolute Error)
-
-$$\text{MAE} = \frac{1}{n} \sum |y_{\text{pred}} - y_{\text{true}}|$$
-
-- **Units:** Same as target
-- **MAE = 0.3540:** Average absolute error 0.35 Borg points
-- **Less sensitive to outliers than RMSE**
-
-### Overfitting Analysis
-
-```
-Train-Test Gap:
-  Train R² = 1.0000
-  Test R²  = 0.9225
-  Gap = 0.0001 (essentially 0)
-  
-  Status: ✅ NO OVERFITTING
-  
-  Interpretation:
-  - Train and test performance nearly identical
-  - Model generalizes well to unseen data
-  - Feature selection successfully eliminated overfitting
+Ridge:
+  Pearson r: 0.567 (p=2.0e-37)
+  RMSE: 1.68
+  MAE: 1.30
 ```
 
 ---
 
 ## Feature Importance
 
-### Top 15 Features by XGBoost Importance
+### XGBoost Feature Importance
 
 ```python
-feature_importance = pd.DataFrame({
-    "feature": feature_cols,
+# Fit model on all data for feature importance
+model.fit(X_selected, y)
+
+importance = pd.DataFrame({
+    "feature": pruned_cols,
     "importance": model.feature_importances_
 }).sort_values("importance", ascending=False)
 
-for idx, row in feature_importance.head(15).iterrows():
-    print(f"{row['feature']:40s} {row['importance']:8.4f}")
+print("Top 10 features by importance:")
+for i, row in importance.head(10).iterrows():
+    print(f"  {row['feature']}: {row['importance']:.4f}")
 ```
 
-**Output:**
+**Top 10 XGBoost Features (5s):**
 ```
-eda_stress_skin_range                 0.1586 (15.86%)
-eda_cc_range                          0.1017 (10.17%)
-eda_stress_skin_mean_abs_diff         0.0872 ( 8.72%)
-eda_stress_skin_slope                 0.0754 ( 7.54%)
-ppg_green_tke_p95_abs                 0.0751 ( 7.51%)
-eda_cc_mean_abs_diff                  0.0701 ( 7.01%)
-imu_acc_z_mean                        0.0598 ( 5.98%)
-ppg_green_p95_p5                      0.0567 ( 5.67%)
-eda_stress_skin_iqr                   0.0534 ( 5.34%)
-ppg_infra_zcr                         0.0467 ( 4.67%)
-imu_acc_y_rms                         0.0445 ( 4.45%)
-ppg_infra_mean_cross_rate             0.0412 ( 4.12%)
-ppg_green_skewness                    0.0398 ( 3.98%)
-eda_cc_std                            0.0367 ( 3.67%)
-ppg_red_mean                          0.0001 ( 0.01%)
+1. ppg_green_range:             0.1824
+2. ppg_green_p95:               0.0949
+3. acc_x_dyn__cardinality:      0.0642
+4. eda_stress_skin_max:         0.0456
+5. ppg_green_trim_mean_10:      0.0398
+6. acc_y_dyn__harmonic_mean:    0.0374
+7. ppg_infra_p95:               0.0321
+8. eda_phasic_energy:           0.0298
+9. acc_z_dyn__lower_moment:     0.0287
+10. ppg_green_ddx_kurtosis:     0.0256
 ```
 
-### Feature Importance Insights
-
-**Top modality (by cumulative importance):**
-1. **EDA:** 52.8% - Stress/arousal is primary effort predictor
-2. **PPG:** 26.7% - Heart rate/HRV contributes
-3. **IMU:** 10.4% - Movement adds information
-4. **RR:** 0% (not computed)
-
-**Red PPG:** Only 0.01% importance
-- Justified by weak signal (68% weaker than Green)
-- But kept in model as it provides marginal information
-
----
-
-## Model Outputs
-
-### Saved Artifacts
+### Ridge Coefficients
 
 ```python
-OUTPUT_DIR = Path(...) / "xgboost_models"
+# Fit model on all data for coefficients
+model.fit(X_scaled, y)
 
-# 1. Model (JSON format)
-model_path = OUTPUT_DIR / "xgboost_borg_10.0s.json"
-model.get_booster().save_model(str(model_path))
+coefficients = pd.DataFrame({
+    "feature": pruned_cols,
+    "coefficient": model.coef_,
+    "abs_coefficient": np.abs(model.coef_)
+}).sort_values("abs_coefficient", ascending=False)
 
-# 2. Feature importance CSV
-importance_path = OUTPUT_DIR / "feature_importance_10.0s.csv"
-feature_importance.to_csv(importance_path, index=False)
+print("Top 10 features by |coefficient|:")
+for i, row in coefficients.head(10).iterrows():
+    print(f"  {row['feature']}: {row['coefficient']:.4f}")
+```
 
-# 3. Metrics JSON
-metrics_path = OUTPUT_DIR / "metrics_10.0s.json"
-metrics = {
-    "window_length": "10.0",
-    "n_samples": 429,
-    "n_features": 100,
-    "train_set_size": 343,
-    "test_set_size": 86,
-    "train_r2": 1.0000,
-    "test_r2": 0.9225,
-    "train_rmse": 0.0000,
-    "test_rmse": 0.5171,
-    "train_mae": 0.0000,
-    "test_mae": 0.3540,
-    "cv_r2_mean": 0.8689,
-    "cv_r2_std": 0.0360,
-    "cv_rmse_mean": 0.6714,
-    "cv_rmse_std": 0.0963,
-    "cv_mae_mean": 0.4164,
-    "cv_mae_std": 0.0575,
+**Top 10 Ridge Features (5s):**
+```
+1. ppg_green_p95:               -0.8487 (negative: higher PPG = lower effort)
+2. acc_x_dyn__cardinality:      +0.6033 (positive: more movement = higher effort)
+3. ppg_red_signal_energy:       +0.3918
+4. ppg_infra_n_peaks:           +0.3738
+5. acc_x_dyn__quantile_0.9:     -0.3500
+6. ppg_infra_shape_factor:      +0.3451
+7. eda_cc_min:                  +0.3200
+8. eda_stress_skin_max:         -0.3120
+9. acc_y_dyn__harmonic_mean:    -0.2254
+10. ppg_infra_ddx_kurtosis:     -0.2251
+```
+
+---
+
+## Hyperparameter Choices
+
+### XGBoost
+
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| n_estimators | 100 | Sufficient for 855 samples |
+| max_depth | 4 | Prevents overfitting |
+| learning_rate | 0.1 | Standard value |
+| n_jobs | -1 | Use all CPUs |
+
+### Ridge
+
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| alpha | 1.0 | Standard L2 regularization |
+| StandardScaler | Yes | Required for meaningful coefficients |
+
+### GroupKFold
+
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| n_splits | 5 | Standard CV, enough folds |
+| groups | activity_ids | Prevent leakage |
+
+---
+
+## Training Time
+
+| Model | 5s (855 samples) | 10s (424 samples) |
+|-------|------------------|-------------------|
+| XGBoost | ~15 seconds | ~8 seconds |
+| Ridge | ~2 seconds | ~1 second |
+| Total | ~20 seconds | ~10 seconds |
+
+---
+
+## Saving Results
+
+### Model Artifacts
+
+```python
+import yaml
+
+# Save XGBoost results
+results_dir = output_path / "xgboost_results"
+results_dir.mkdir(parents=True, exist_ok=True)
+
+# Feature importance
+importance.to_csv(results_dir / "feature_importance.csv", index=False)
+
+# Predictions
+results_df = pd.DataFrame({
+    "y_true": y,
+    "y_pred": y_pred,
+    "subject": df_labeled["subject"].values,
+    "activity_id": groups,
+})
+results_df.to_csv(results_dir / "predictions.csv", index=False)
+
+# Summary metrics
+summary = {
+    "model": "XGBoost",
+    "cv_method": f"GroupKFold ({n_splits} folds)",
+    "n_samples": len(y),
+    "n_activities": n_activities,
+    "n_features": len(pruned_cols),
+    "pearson_r": float(r),
+    "p_value": float(p),
+    "rmse": float(rmse),
+    "mae": float(mae),
 }
-with open(metrics_path, "w") as f:
-    json.dump(metrics, f, indent=2)
+with open(results_dir / "summary.yaml", "w") as f:
+    yaml.dump(summary, f)
+```
+
+### Output Structure
+
+```
+/Users/pascalschlegel/data/interim/elderly_combined/
+├── xgboost_results/           # 5s XGBoost
+│   ├── summary.yaml
+│   ├── feature_importance.csv
+│   └── predictions.csv
+├── linear_results/            # 5s Ridge
+│   ├── summary.yaml
+│   ├── coefficients.csv
+│   └── predictions.csv
+├── xgboost_results_10.0s/     # 10s XGBoost
+├── ridge_results_10.0s/       # 10s Ridge
+├── xgboost_results_30.0s/     # 30s XGBoost
+└── ridge_results_30.0s/       # 30s Ridge
 ```
 
 ---
 
-## Performance Summary
+## Why Ridge Outperforms XGBoost Here
 
-### Overall Assessment
+**Observation:** Ridge (r=0.644) slightly beats XGBoost (r=0.626) on 5s windows.
 
-```
-✅ Model Performance: EXCELLENT
-  - Test R²: 0.9225 (explains 92.25% of variance)
-  - Test RMSE: 0.5171 Borg points (±0.52 typical error)
-  - Overfitting: ELIMINATED (train-test gap = 0.0001)
-  - Generalization: STABLE (CV std = 0.036)
+**Possible reasons:**
+1. **Limited samples (855):** Linear models can outperform trees on small datasets
+2. **Selected features already correlated:** Top correlation-selected features have linear relationship with target
+3. **Feature standardization:** Ridge benefits from scaled features
+4. **Regularization:** L2 penalty works well with correlated features
 
-✅ Feature Engineering: EFFECTIVE
-  - Selection reduced features 47% (188 → 100)
-  - EDA features dominate (52.8% importance)
-  - Biological insight: Stress is primary effort marker
-
-✅ Production Readiness: READY
-  - Cross-validation stable across 5 folds
-  - No signs of overfitting
-  - Can deploy for real-time inference
-```
-
-### Limitations & Future Work
-
-```
-⚠️ Single Subject: Only 1 patient (sim_elderly3)
-   → Need multi-subject validation
-
-⚠️ Small Dataset: 429 labeled windows
-   → Future: Collect 1000+ samples
-
-⚠️ Limited Hyperparameter Tuning: Standard XGBoost config
-   → Future: Grid search with more data
-
-⚠️ No RR Integration: Respiratory rate infrastructure in place
-   → Future: Solve non-uniform sampling issue
-
-🎯 Next Steps:
-   1. Collect data from additional subjects
-   2. Test v2 model generalization
-   3. Consider RR intervals for autonomic info
-   4. Hyperparameter optimization with larger dataset
-```
+**Recommendation:** Use Ridge for interpretability, XGBoost for non-linear patterns.
 
 ---
 
-## Comparison: V1 vs V2 Models
+## Common Issues & Solutions
 
-| Aspect | V1 (Single modality) | V2 (Multi-modality) |
-|--------|---------------------|-------------------|
-| **Modalities** | 1 (PPG Green only) | 5 (PPG×3 + IMU + EDA) |
-| **Features** | 44 | 188 (after selection: 100) |
-| **Test R²** | 0.9622 | 0.9225 |
-| **Overfitting** | None | None |
-| **Primary signal** | HRV | EDA stress |
-| **Use case** | Baseline | Multi-sensor future |
+### Issue: RuntimeWarning in Ridge
 
-**Trade-off:** Slight R² decrease (-0.0397) for infrastructure enabling:
-- Multi-sensor fusion framework
-- EDA integration (stress measurement)
-- RR integration pathway (future)
-- Better multi-subject generalization potential
+```
+RuntimeWarning: divide by zero encountered in matmul
+```
+
+**Cause:** Some features have zero variance or inf values
+
+**Solution:**
+```python
+# Remove constant features before training
+X_var = X_selected.var(axis=0)
+valid_features = X_var > 0
+X_filtered = X_selected[:, valid_features]
+```
+
+### Issue: GroupKFold fails
+
+```
+ValueError: n_splits cannot be greater than number of groups
+```
+
+**Cause:** Too few activities (groups) for requested folds
+
+**Solution:**
+```python
+n_splits = min(5, n_activities)  # Adapt to available groups
+```
+
+### Issue: Poor CV scores
+
+**Possible causes:**
+1. Data leakage (use GroupKFold, not KFold)
+2. Too few samples per fold
+3. Noisy features included
 
 ---
 
-## Prediction Example
+## Summary
 
-**Sample prediction on test set:**
+| Aspect | 5s Windows | 10s Windows |
+|--------|------------|-------------|
+| N Samples | 855 | 424 |
+| N Activities | 65 | 61 |
+| N Features | 48 | 51 |
+| XGBoost r | 0.626 | 0.548 |
+| Ridge r | 0.644 | 0.567 |
+| Best Model | Ridge | Ridge |
+| CV Method | GroupKFold (5) | GroupKFold (5) |
 
-```
-Window: t_start=42.3s, Actual Borg = 8
-
-Feature values in this window:
-  eda_stress_skin_range: 0.92 (high)
-  ppg_green_hr_mean: 95 (elevated)
-  imu_acc_z_mean: 0.18 (some movement)
-
-Model predicts: Borg = 7.8
-Error: -0.2 Borg points
-Interpretation: "Hard effort" (predicted 7.8 vs actual 8)
-```
-
----
-
-## Reproducibility
-
-**To reproduce exact results:**
-
-```bash
-cd /Users/pascalschlegel/effort-estimator
-
-# Ensure Python environment
-source .venv/bin/activate
-
-# Run full pipeline
-python run_pipeline.py
-
-# Train model with fixed random seed
-python train_xgboost_borg.py
-```
-
-**Random seeds fixed:**
-- `train_test_split: random_state=42`
-- `KFold: random_state=42`
-- `XGBoost: random_state=42`
-
-Outputs will be identical across runs.
-
+**Conclusion:** 5s windows with Ridge regression provide best performance (r=0.644, MAE=1.17).

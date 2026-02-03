@@ -5,7 +5,7 @@ PC1,ppg_red_p90,0.3387093039099468
 PC1,ppg_red_p10,0.33786803289990225
 PC1,ppg_red_mad,0.3319102583344501
 PC1,ppg_red_signal_energy,0.3279399671632194
-PC1,ppg_red_tke_mean,0.32279754602506816
+PC1,ppg_red_tke_mean_abs,0.32279754602506816
 PC1,ppg_red_tke_std,0.29509425207332307
 PC2,ppg_red_kurtosis,0.46841585478555
 PC2,ppg_red_shape_factor,0.4535101195812278
@@ -56,7 +56,7 @@ PC7,ppg_red_signal_energy,0.19523278076569622
 PC7,ppg_red_ddx_mean,0.19435575839500907
 PC7,ppg_red_shape_factor,0.1874748289763578
 PC8,ppg_red_tke_std,0.5657186381624479
-PC8,ppg_red_tke_mean,0.44065559089807343
+PC8,ppg_red_tke_mean_abs,0.44065559089807343
 PC8,ppg_red_ddx_kurtosis,0.2701043132536176
 PC8,ppg_red_mad,0.2465567342547123
 PC8,ppg_red_p10,0.23564755664664078

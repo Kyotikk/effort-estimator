@@ -1,0 +1,14 @@
+feature,reason,value
+ppg_green_sdsd,nan_ratio>0.1,0.9798657718120806
+ppg_green_hr_mean,nan_ratio>0.1,0.6630872483221476
+ppg_green_hr_std,nan_ratio>0.1,0.6630872483221476
+ppg_green_hr_min,nan_ratio>0.1,0.6630872483221476
+ppg_green_hr_max,nan_ratio>0.1,0.6630872483221476
+ppg_green_hr_range,nan_ratio>0.1,0.6630872483221476
+ppg_green_hr_median,nan_ratio>0.1,0.6630872483221476
+ppg_green_rmssd,nan_ratio>0.1,0.6630872483221476
+ppg_green_sdnn,nan_ratio>0.1,0.6630872483221476
+ppg_green_pnn50,nan_ratio>0.1,0.6630872483221476
+ppg_green_pnn20,nan_ratio>0.1,0.6630872483221476
+ppg_green_mean_ibi,nan_ratio>0.1,0.6630872483221476
+ppg_green_cv_ibi,nan_ratio>0.1,0.6630872483221476

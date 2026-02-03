@@ -1,0 +1,7 @@
+feature,reason,value
+ppg_red_lf_hf_ratio,nan_ratio>0.1,0.42
+ppg_red_lf_norm,nan_ratio>0.1,0.42
+ppg_red_hf_norm,nan_ratio>0.1,0.42
+ppg_red_lf_power,nan_ratio>0.1,0.19666666666666666
+ppg_red_hf_power,nan_ratio>0.1,0.19666666666666666
+ppg_red_total_power,nan_ratio>0.1,0.19666666666666666

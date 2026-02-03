@@ -1,0 +1,4 @@
+feature,reason,value
+ppg_infra_hr_mean,|corr|>=0.95,0.9918185206671553
+ppg_infra_sdnn,|corr|>=0.95,0.9568767726698344
+ppg_infra_hr_median,|corr|>=0.95,0.9557490722449711

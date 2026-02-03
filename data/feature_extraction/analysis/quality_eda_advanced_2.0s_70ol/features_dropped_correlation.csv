@@ -1,5 +1,5 @@
 feature,reason,value
-eda_scr_rate,|corr|>=0.95,1.0
+eda_scr_count,|corr|>=0.95,1.0
 eda_scl_auc,|corr|>=0.95,0.9999999999999988
 eda_scl_std,|corr|>=0.95,0.9999999994889814
 eda_scl_max,|corr|>=0.95,0.9999999814433101

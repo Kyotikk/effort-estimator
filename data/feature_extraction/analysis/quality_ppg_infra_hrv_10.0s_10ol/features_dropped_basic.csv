@@ -1,0 +1,5 @@
+feature,reason,value
+ppg_infra_lf_hf_ratio,nan_ratio>0.1,0.36666666666666664
+ppg_infra_lf_norm,nan_ratio>0.1,0.36666666666666664
+ppg_infra_hf_norm,nan_ratio>0.1,0.36666666666666664
+ppg_infra_lf_power,variance<=1e-08,0.0

@@ -1,7 +1,8 @@
 feature,reason,value
-ppg_infra_lf_hf_ratio,nan_ratio>0.1,0.4436416184971098
-ppg_infra_lf_norm,nan_ratio>0.1,0.4436416184971098
-ppg_infra_hf_norm,nan_ratio>0.1,0.4436416184971098
-ppg_infra_lf_power,nan_ratio>0.1,0.1791907514450867
-ppg_infra_hf_power,nan_ratio>0.1,0.1791907514450867
-ppg_infra_total_power,nan_ratio>0.1,0.1791907514450867
+ppg_infra_lf_hf_ratio,nan_ratio>0.1,0.5164279696714406
+ppg_infra_lf_norm,nan_ratio>0.1,0.5164279696714406
+ppg_infra_hf_norm,nan_ratio>0.1,0.5164279696714406
+ppg_infra_lf_power,nan_ratio>0.1,0.2384161752316765
+ppg_infra_hf_power,nan_ratio>0.1,0.2384161752316765
+ppg_infra_total_power,nan_ratio>0.1,0.2384161752316765
+ppg_infra_sdsd,nan_ratio>0.1,0.13563605728727884

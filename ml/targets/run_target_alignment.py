@@ -25,6 +25,11 @@ def run_alignment(
     # -------------------------
     features = pd.read_csv(features_path)
     windows = pd.read_csv(windows_path)
+    
+    # Handle empty feature files gracefully
+    if len(features) == 0:
+        print(f"  ⚠ No data in features file (0 rows), skipping alignment")
+        return
 
     # -------------------------
     # Ensure window_id exists (required by fusion)

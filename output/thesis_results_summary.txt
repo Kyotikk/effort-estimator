@@ -1,0 +1,17 @@
+
+THESIS RESULTS: ACTIVITY-LEVEL EFFORT ESTIMATION
+================================================
+
+Dataset:
+- Activities: 115
+- Subjects: 4 elderly patients
+- Features: HR_delta, HR_load, duration
+
+Results:
+| Method                     | r     | MAE  | ±1 Borg |
+|----------------------------|-------|------|---------|
+| Within-subject correlation | 0.468 |  -   |    -    |
+| Cross-subject LOSO         | -0.201 | 1.85 | 25.2%   |
+| Personalized (50/50)       | 0.779 | 0.90 | 62.1%   |
+
+Individual Subject Performance (Personalized):
